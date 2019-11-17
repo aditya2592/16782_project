@@ -97,8 +97,8 @@ def parse_arguments():
         parse commandline arguments
     '''
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--specific', dest='specific', type=int, default=None, help="specific trajectory")
     parser.add_argument('--test', dest='test', action='store_true', help="use test data")
+    parser.add_argument('--env', dest='env', type=str, help="create train data only for given env", default=None)
     parser.set_defaults(test=False)
     return parser.parse_args()
 
@@ -115,6 +115,7 @@ if __name__ == "__main__":
         directory = os.path.join(os.environ["PLANNING_PROJECT_DATA"], "train")
         directory_clean = os.path.join(os.environ["PLANNING_PROJECT_DATA"], "train_clean")
     
+    env = args.env
     # remove current results
     if os.path.exists(directory_clean):
         shutil.rmtree(directory_clean)
@@ -126,18 +127,27 @@ if __name__ == "__main__":
     
     for env_path in filter(lambda f: f[0].isdigit(), env_paths):
         os.mkdir(os.path.join(directory_clean, env_path))
+        print("Found env path : {}".format(env_path))
+        if env is not None:
+            if env_path != env:
+                print("Ignoring environment")
+                continue
         
         bulk_paths = os.listdir(os.path.join(directory, env_path))
         
         for bulk_path in filter(lambda f: f.startswith('dump'), bulk_paths):
+            print("     Found bulk path : {}".format(bulk_path))
             sample_paths = os.listdir(os.path.join(directory, env_path, bulk_path))
-            
-            for sample_path in filter(lambda f: f.startswith('solution_path'), sample_paths):
-                complete_sample_path = os.path.join(directory, env_path, bulk_path, sample_path)
-                complete_env_path = os.path.join(directory, env_path, "proj_env.env")
-                complete_directory_clean = os.path.join(directory_clean, env_path)
-                
-                data_path_base = os.path.join(directory_clean, env_path, "data_base.txt")
-                data_path_arm = os.path.join(directory_clean, env_path, "data_arm.txt")
-                
-                label_traj(complete_sample_path, complete_env_path, complete_directory_clean, data_path_arm, data_path_base)
+
+            for paths_dir in filter(lambda f: f.startswith('paths'), sample_paths):
+                sample_paths = os.listdir(os.path.join(directory, env_path, bulk_path, paths_dir))
+                for sample_path in filter(lambda f: f.startswith('solution_path'), sample_paths):
+                    complete_sample_path = os.path.join(directory, env_path, bulk_path, paths_dir, sample_path)
+                    print("     Found txt path : {}".format(complete_sample_path))
+                    complete_env_path = os.path.join(directory, env_path, "proj_env.env")
+                    complete_directory_clean = os.path.join(directory_clean, env_path)
+                    
+                    data_path_base = os.path.join(directory_clean, env_path, "data_base.txt")
+                    data_path_arm = os.path.join(directory_clean, env_path, "data_arm.txt")
+                    
+                    label_traj(complete_sample_path, complete_env_path, complete_directory_clean, data_path_arm, data_path_base)

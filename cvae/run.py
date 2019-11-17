@@ -24,6 +24,9 @@ def load_dataset(dataset_root, data_type="arm"):
     for env_dir_index in filter(lambda f: f[0].isdigit(), env_dir_paths):
         env_paths_file = os.path.join(dataset_root, env_dir_index, "data_{}.txt".format(data_type))
         env_paths = np.loadtxt(env_paths_file)
+        # Take only required elements
+        env_paths = env_paths[:, :X_DIM + C_DIM]
+        # Uniquify to remove duplicates
         env_paths = np.unique(env_paths, axis=0)
         env_index = np.empty((env_paths.shape[0], 1))
         env_index.fill(env_dir_index)
@@ -35,10 +38,17 @@ def load_dataset(dataset_root, data_type="arm"):
     return dataloader
 
 def plot(x, c):
+    # print(c)
+    start = c[0:2]
+    goal = c[2:4]
     # For given conditional, plot the samples
     fig1 = plt.figure(figsize=(10, 6), dpi=80)
     ax1 = fig1.add_subplot(111, aspect='equal')
     plt.scatter(x[:, 0], x[:, 1], color="green", s=70, alpha=0.1)
+    plt.scatter(start[0], start[1], color="blue", s=70, alpha=0.6)
+    plt.scatter(goal[0], goal[1], color="red", s=70, alpha=0.6)
+    plt.xlim(0, X_MAX)
+    plt.ylim(0, Y_MAX)
     plt.savefig('fig_test.png')
     # plt.show()
     plt.close(fig1)
@@ -74,9 +84,10 @@ def train(
                     epoch, num_epochs, iteration, len(dataloader)-1, loss.item()))
             if iteration % TEST_INTERVAL == 0 or iteration == len(dataloader)-1:
                 # Test CVAE for one c from this batch by drawing samples
-                x_test = cvae.inference(n=100, c=c[0,:])
+                c_test = c[0,:]
+                x_test = cvae.inference(n=100, c=c_test)
                 x_test = x_test.detach().cpu().numpy()
-                plot(x_test, c)
+                plot(x_test, c_test)
 
 def parse_arguments():
     # Command-line flags are defined here.

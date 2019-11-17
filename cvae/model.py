@@ -72,7 +72,8 @@ class Decoder(nn.Module):
             if i+1 < len(layer_sizes):
                 self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
             else:
-                self.MLP.add_module(name="sigmoid", module=nn.Sigmoid())
+                self.MLP.add_module(
+                    name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
 
     def forward(self, z, c):
 
@@ -187,8 +188,9 @@ class CVAE(nn.Module):
         return recon_x
 
     def loss_fn(self, recon_x, x, mean, log_var):
-        BCE = torch.nn.functional.binary_cross_entropy(
-            recon_x, x, reduction='sum')
+        # BCE = torch.nn.functional.binary_cross_entropy(
+        #     recon_x, x, reduction='sum')
+        MSE = torch.nn.functional.mse_loss(recon_x, x, reduction='sum')
         KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
 
-        return (BCE + KLD) / x.size(0)
+        return (MSE + KLD) / x.size(0)

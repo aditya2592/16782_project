@@ -5,7 +5,8 @@ CUDA_AVAILABLE = True and torch.cuda.is_available()
 USE_TENSORBOARD = True
 TF_PATH = 'tensorboard'
 EXPERIMENT_PATH_PREFIX = 'experiments/cvae'
-LOG_INTERVAL = 10
+LOG_INTERVAL = 50
+TEST_INTERVAL = 50
 
 # Training params
 INITIAL_LEARNING_RATE = 0.0001

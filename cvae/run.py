@@ -16,17 +16,7 @@ from model import CVAE
 from model_constants import *
 from paths_dataset import PathsDataset
 
-def parse_arguments():
-    # Command-line flags are defined here.
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--run_id', dest='run_id', type=str, default=1)
-    parser.add_argument('--num_epochs', 
-                        dest='num_epochs',                         
-                        type=int,
-                        default=50)
-    parser.add_argument('--dataset_root', dest='dataset_root', type=str)
-    parser.add_argument('--exp_path_prefix', dest='experiment_path_prefix', type=str)
-    return parser.parse_args()
+
 
 def load_dataset(dataset_root, data_type="arm"):
     paths_dataset = PathsDataset()
@@ -34,13 +24,25 @@ def load_dataset(dataset_root, data_type="arm"):
     for env_dir_index in filter(lambda f: f[0].isdigit(), env_dir_paths):
         env_paths_file = os.path.join(dataset_root, env_dir_index, "data_{}.txt".format(data_type))
         env_paths = np.loadtxt(env_paths_file)
+        env_paths = np.unique(env_paths, axis=0)
         env_index = np.empty((env_paths.shape[0], 1))
         env_index.fill(env_dir_index)
         data = np.hstack((env_index, env_paths))
         paths_dataset.add_env_paths(data.tolist())
+        print("Added {} paths from {} environment".format(env_paths.shape[0], env_dir_index))
 
     dataloader = DataLoader(paths_dataset, batch_size=BATCH_SIZE, shuffle=True)
     return dataloader
+
+def plot(x, c):
+    # For given conditional, plot the samples
+    fig1 = plt.figure(figsize=(10, 6), dpi=80)
+    ax1 = fig1.add_subplot(111, aspect='equal')
+    plt.scatter(x[:, 0], x[:, 1], color="green", s=70, alpha=0.1)
+    plt.savefig('fig_test.png')
+    # plt.show()
+    plt.close(fig1)
+
 
 def train(
         run_id=1,
@@ -70,14 +72,35 @@ def train(
             if iteration % LOG_INTERVAL == 0 or iteration == len(dataloader)-1:
                 print("Epoch {:02d}/{:02d} Batch {:04d}/{:d}, Loss {:9.4f}".format(
                     epoch, num_epochs, iteration, len(dataloader)-1, loss.item()))
+            if iteration % TEST_INTERVAL == 0 or iteration == len(dataloader)-1:
+                # Test CVAE for one c from this batch by drawing samples
+                x_test = cvae.inference(n=100, c=c[0,:])
+                x_test = x_test.detach().cpu().numpy()
+                plot(x_test, c)
+
+def parse_arguments():
+    # Command-line flags are defined here.
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--run_id', dest='run_id', type=str, default=1)
+    parser.add_argument('--num_epochs', 
+                        dest='num_epochs',                         
+                        type=int,
+                        default=10)
+    parser.add_argument('--dataset_root', dest='dataset_root', type=str)
+    parser.add_argument('--dataset_type', dest='dataset_type', type=str, help='choose arm/base', default='arm')
+    parser.add_argument('--exp_path_prefix', dest='experiment_path_prefix', type=str)
+    return parser.parse_args()
 
 if __name__ == "__main__":
     args = parse_arguments()
     run_id = args.run_id
     num_epochs = args.num_epochs
     dataset_root = args.dataset_root
+    dataset_type = args.dataset_type
 
-    dataloader = load_dataset(dataset_root)
+    dataloader = load_dataset(
+                    dataset_root,
+                    data_type=dataset_type)
 
     train(
         run_id=run_id,

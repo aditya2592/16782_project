@@ -181,7 +181,8 @@ class CVAE(nn.Module):
     def inference(self, n=1, c=None):
         batch_size = n
         z = torch.randn([batch_size, self.latent_dim])
-
+        c = c.unsqueeze(dim=0)
+        c = torch.cat(batch_size * [c])
         recon_x = self.decoder(z, c)
         return recon_x
 

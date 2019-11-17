@@ -11,21 +11,39 @@ import time
 import argparse
 
 from model import CVAE
+from model_constants import *
 
 def parse_arguments():
     # Command-line flags are defined here.
     parser = argparse.ArgumentParser()
     parser.add_argument('--run_id', dest='run_id', type=str, default=1)
+    parser.add_argument('--num_epochs', 
+                        dest='num_epochs',                         
+                        type=int,
+                        default=50)
     parser.add_argument('--exp_path_prefix', dest='experiment_path_prefix', type=str)
     return parser.parse_args()
 
-def train(run_id=1):
-    model = CVAE(run_id=run_id)
+def load_dataset(dataset_root):
+    pass
+def train(
+        run_id=1,
+        num_epochs=1,
+        initial_learning_rate=0.001,
+        weight_decay=0.0001):
+    
+    cvae = CVAE(run_id=run_id)
+    optimizer = torch.optim.Adam(cvae.parameters(), lr=initial_learning_rate, weight_decay=weight_decay)
 
 if __name__ == "__main__":
     args = parse_arguments()
     run_id = args.run_id
-    train(run_id=run_id)
+    num_epochs = args.num_epochs
+    train(
+        run_id=run_id,
+        num_epochs=num_epochs,
+        initial_learning_rate=INITIAL_LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY)
 
 
 # (restrict tensorflow memory growth)

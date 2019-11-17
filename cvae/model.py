@@ -17,8 +17,6 @@ class Encoder(nn.Module):
         super().__init__()
 
         self.conditional = conditional
-        if self.conditional:
-            layer_sizes[0] += num_labels
 
         self.MLP = nn.Sequential()
 
@@ -79,8 +77,8 @@ class Decoder(nn.Module):
 class CVAE(nn.Module):
 
     def __init__(self,
-                 x_dmin=X_DIM,
-                 c_dmin=C_DIM,
+                 x_dim=X_DIM,
+                 c_dim=C_DIM,
                  latent_dim=LATENT_DIM,
                  run_id=1,
                  experiment_path_prefix=EXPERIMENT_PATH_PREFIX,
@@ -97,20 +95,17 @@ class CVAE(nn.Module):
         :param learning_rate:
         """
         super(CVAE, self).__init__()
-        self.x_dim = x_dmin
-        self.c_dim = c_dmin
+        self.x_dim = x_dim
+        self.c_dim = c_dim
         self.latent_dim = latent_dim
 
         self.cuda_available = cuda_available
         self.device = torch.device('cuda' if CUDA_AVAILABLE else 'cpu')
 
-
         self.hiddens = hiddens
-
-        self.model = self.create_network()
-
+        self.encoder_layer_sizes = [self.x_dim + self.c_dim] + self.hiddens
         self.encoder = Encoder(
-            hiddens, self.latent_dim, True, self.c_dim)
+            self.encoder_layer_sizes, self.latent_dim, True, self.c_dim)
         self.decoder = Decoder(
             hiddens, self.latent_dim, True, self.c_dim)
 
@@ -155,41 +150,33 @@ class CVAE(nn.Module):
         model_path = os.path.join(self.experiment_path_prefix, self.run_id, 'model-{}.pkl'.format(suffix))
         torch.save({'state_dict': self.model.state_dict()}, model_path)
 
-    def predict(self, x, c, model_idx):
-        self.model.eval()
-        x = x.to(self.device)
-        c = c.to(self.device)
-        return self.model(torch.cat([x, c], dim=1))
+    def forward(self, x, c=None):
+        if x.dim() > 2:
+            x = x.view(-1, 28*28)
 
-    def forward(self, model_input):
-        self.model.train()
-        return self.model(model_input)
+        batch_size = x.size(0)
 
-    def create_network(self):
-        if len(self.hiddens) > 0:
-            modules = [
-                nn.Linear(self.x_dim + self.c_dim, self.hiddens[0]),
-                nn.ReLU(inplace=True)
-            ]
-            for i in range(1, len(self.hiddens)):
-                modules.extend([
-                    nn.Linear(self.hiddens[i - 1], self.hiddens[i]),
-                    nn.ReLU(inplace=True)
-                ])
-            modules.extend([nn.Linear(self.hiddens[-1], 2 * self.x_dim)])
-        else:
-            modules = [nn.Linear(self.x_dim + self.c_dim, 2 * self.x_dim)]
+        means, log_var = self.encoder(x, c)
 
-        model = nn.Sequential(*modules)
-        print(model)
-        return model
+        std = torch.exp(0.5 * log_var)
+        eps = torch.randn([batch_size, self.latent_size])
 
-    def train(self, replay_buffer, batch_size=128, epochs=5):
-        """
-        Arguments:
-          inputs: state and action inputs.  Assumes that inputs are standardized.
-          targets: resulting states
-        """
-        pass
+        # Reparametrize 
+        z = eps * std + means
 
-    # TODO: Write any helper functions that you need
+        recon_x = self.decoder(z, c)
+        return recon_x, means, log_var, z
+
+    def inference(self, n=1, c=None):
+        batch_size = n
+        z = torch.randn([batch_size, self.latent_size])
+
+        recon_x = self.decoder(z, c)
+        return recon_x
+
+    def loss_fn(recon_x, x, mean, log_var):
+        BCE = torch.nn.functional.binary_cross_entropy(
+            recon_x.view(-1, 28*28), x.view(-1, 28*28), reduction='sum')
+        KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
+
+        return (BCE + KLD) / x.size(0)

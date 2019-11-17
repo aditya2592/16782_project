@@ -3,7 +3,7 @@ import argparse
 import os
 import numpy as np
 
-def label_traj(complete_sample_path, complete_env_path, directory_clean, data_path_arm, data_path_base):
+def label_traj(complete_sample_path, complete_env_path, complete_directory_clean, data_path_arm, data_path_base):
     '''
         get arm and base labels from a single solution_path file
     '''
@@ -17,7 +17,10 @@ def label_traj(complete_sample_path, complete_env_path, directory_clean, data_pa
                 line = f.readline()
                 
                 while line:
-                    joint_angles = line.split(" ")
+                    # import pdb
+                    # pdb.set_trace()
+                    
+                    joint_angles = line.strip("\n").strip(" ").split(" ")
                     joint_angles = list(map((lambda x: float(x)),joint_angles))
 
                     base_joint_angles = np.array(joint_angles[:3])
@@ -34,10 +37,14 @@ def label_traj(complete_sample_path, complete_env_path, directory_clean, data_pa
                     arm_moved = np.any(np.abs(arm_joint_angles - prev_arm_joint_angles) > epsilon)
                     
                     if base_moved:
-                        b.write("{} {}".format(joint_angles[0], joint_angles[1]))
+                        b.write("{} {}\n".format(joint_angles[0], joint_angles[1]))
                     
                     if arm_moved:
-                        a.write("{} {}".format(joint_angles[0], joint_angles[1]))
+                        a.write("{} {}\n".format(joint_angles[0], joint_angles[1]))
+                        
+                    line = f.readline()
+                    prev_base_joint_angles = base_joint_angles
+                    prev_arm_joint_angles = arm_joint_angles
 
 def parse_arguments():
     '''
@@ -47,8 +54,6 @@ def parse_arguments():
     # parser.add_argument('--specific', dest='specific', type=int, default=None, help="specific trajectory")
     parser.add_argument('--test', dest='test', action='store_true', help="use test data")
     parser.set_defaults(test=False)
-    parser.add_argument('--cont', dest='cont', action='store_true', help="append data to existing lists")
-    parser.set_defaults(cont=False)
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -63,25 +68,29 @@ if __name__ == "__main__":
     else:
         directory = os.path.join(os.environ["PLANNING_PROJECT_DATA"], "train")
         directory_clean = os.path.join(os.environ["PLANNING_PROJECT_DATA"], "train_clean")
-    
-    data_path_base = os.path.join(directory_clean, "data_base.txt")
-    data_path_arm = os.path.join(directory_clean, "data_arm.txt")
-    
-    if not args.cont:
-        if os.path.exists(data_path_base):
-            os.remove(data_path_base)
-        if os.path.exists(data_path_arm):
-            os.remove(data_path_arm)
             
+    if os.path.exists(directory_clean):
+        os.remove(directory_clean)
+        
+    os.mkdir(directory_clean)
+    
     # if args.specific == None:
     env_paths = os.listdir(directory)
-    for env_path in env_paths:
+    
+    for env_path in filter(lambda f: f[0].isdigit(), env_paths):
+        os.mkdir(os.path.join(directory_clean, env_path))
+        
         bulk_paths = os.listdir(os.path.join(directory, env_path))
         
-        for bulk_path in bulk_paths:
+        for bulk_path in filter(lambda f: f.startswith('dump'), bulk_paths):
             sample_paths = os.listdir(os.path.join(directory, env_path, bulk_path))
             
             for sample_path in filter(lambda f: f.startswith('solution_path'), sample_paths):
                 complete_sample_path = os.path.join(directory, env_path, bulk_path, sample_path)
                 complete_env_path = os.path.join(directory, env_path, "proj_env.env")
-                label_traj(complete_sample_path, complete_env_path, directory_clean, data_path_arm, data_path_base)
+                complete_directory_clean = os.path.join(directory_clean, env_path)
+                
+                data_path_base = os.path.join(directory_clean, env_path, "data_base.txt")
+                data_path_arm = os.path.join(directory_clean, env_path, "data_arm.txt")
+                
+                label_traj(complete_sample_path, complete_env_path, complete_directory_clean, data_path_arm, data_path_base)

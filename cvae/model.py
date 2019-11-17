@@ -27,11 +27,21 @@ class Encoder(nn.Module):
 
         self.linear_means = nn.Linear(layer_sizes[-1], latent_dim)
         self.linear_log_var = nn.Linear(layer_sizes[-1], latent_dim)
+  
+    def idx2onehot(self, idx, n):
+        assert torch.max(idx).item() < n
+        if idx.dim() == 1:
+            idx = idx.unsqueeze(1)
+
+        onehot = torch.zeros(idx.size(0), n)
+        onehot.scatter_(1, idx, 1)
+
+        return onehot
 
     def forward(self, x, c=None):
 
         if self.conditional:
-            c = idx2onehot(c, n=10)
+            # c = self.idx2onehot(c, n=C_DIM)
             x = torch.cat((x, c), dim=-1)
 
         x = self.MLP(x)
@@ -67,7 +77,7 @@ class Decoder(nn.Module):
     def forward(self, z, c):
 
         if self.conditional:
-            c = idx2onehot(c, n=10)
+            # c = idx2onehot(c, n=10)
             z = torch.cat((z, c), dim=-1)
 
         x = self.MLP(z)
@@ -104,10 +114,11 @@ class CVAE(nn.Module):
 
         self.hiddens = hiddens
         self.encoder_layer_sizes = [self.x_dim + self.c_dim] + self.hiddens
+        self.decoder_layer_sizes = self.hiddens + [self.x_dim] 
         self.encoder = Encoder(
             self.encoder_layer_sizes, self.latent_dim, True, self.c_dim)
         self.decoder = Decoder(
-            hiddens, self.latent_dim, True, self.c_dim)
+            self.decoder_layer_sizes, self.latent_dim, True, self.c_dim)
 
         print("Encoder : {}".format(self.encoder))
         print("Decoder : {}".format(self.decoder))
@@ -159,7 +170,7 @@ class CVAE(nn.Module):
         means, log_var = self.encoder(x, c)
 
         std = torch.exp(0.5 * log_var)
-        eps = torch.randn([batch_size, self.latent_size])
+        eps = torch.randn([batch_size, self.latent_dim])
 
         # Reparametrize 
         z = eps * std + means
@@ -169,14 +180,14 @@ class CVAE(nn.Module):
 
     def inference(self, n=1, c=None):
         batch_size = n
-        z = torch.randn([batch_size, self.latent_size])
+        z = torch.randn([batch_size, self.latent_dim])
 
         recon_x = self.decoder(z, c)
         return recon_x
 
-    def loss_fn(recon_x, x, mean, log_var):
+    def loss_fn(self, recon_x, x, mean, log_var):
         BCE = torch.nn.functional.binary_cross_entropy(
-            recon_x.view(-1, 28*28), x.view(-1, 28*28), reduction='sum')
+            recon_x, x, reduction='sum')
         KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
 
         return (BCE + KLD) / x.size(0)

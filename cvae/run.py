@@ -9,9 +9,12 @@ import csv
 from random import randint, random
 import time
 import argparse
+from torch.utils.data import DataLoader
+import torch.nn.functional as F
 
 from model import CVAE
 from model_constants import *
+from paths_dataset import PathsDataset
 
 def parse_arguments():
     # Command-line flags are defined here.
@@ -21,29 +24,67 @@ def parse_arguments():
                         dest='num_epochs',                         
                         type=int,
                         default=50)
+    parser.add_argument('--dataset_root', dest='dataset_root', type=str)
     parser.add_argument('--exp_path_prefix', dest='experiment_path_prefix', type=str)
     return parser.parse_args()
 
-def load_dataset(dataset_root):
-    pass
+def load_dataset(dataset_root, data_type="arm"):
+    paths_dataset = PathsDataset()
+    env_dir_paths = os.listdir(dataset_root)
+    for env_dir_index in filter(lambda f: f[0].isdigit(), env_dir_paths):
+        env_paths_file = os.path.join(dataset_root, env_dir_index, "data_{}.txt".format(data_type))
+        env_paths = np.loadtxt(env_paths_file)
+        env_index = np.empty((env_paths.shape[0], 1))
+        env_index.fill(env_dir_index)
+        data = np.hstack((env_index, env_paths))
+        paths_dataset.add_env_paths(data.tolist())
+
+    dataloader = DataLoader(paths_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    return dataloader
+
 def train(
         run_id=1,
         num_epochs=1,
         initial_learning_rate=0.001,
-        weight_decay=0.0001):
+        weight_decay=0.0001,
+        dataloader=None):
     
     cvae = CVAE(run_id=run_id)
     optimizer = torch.optim.Adam(cvae.parameters(), lr=initial_learning_rate, weight_decay=weight_decay)
+    device = torch.device('cuda' if CUDA_AVAILABLE else 'cpu')
+
+    for epoch in range(num_epochs):
+        for iteration, batch in enumerate(dataloader):
+            # print(batch['state'].shape)
+            x = batch['state'].float().to(device)
+            c = batch['condition'].float().to(device)
+            recon_x, mean, log_var, z = cvae(x, c)
+            # print(recon_x.shape)
+
+            loss = cvae.loss_fn(recon_x, x, mean, log_var)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            if iteration % LOG_INTERVAL == 0 or iteration == len(dataloader)-1:
+                print("Epoch {:02d}/{:02d} Batch {:04d}/{:d}, Loss {:9.4f}".format(
+                    epoch, num_epochs, iteration, len(dataloader)-1, loss.item()))
 
 if __name__ == "__main__":
     args = parse_arguments()
     run_id = args.run_id
     num_epochs = args.num_epochs
+    dataset_root = args.dataset_root
+
+    dataloader = load_dataset(dataset_root)
+
     train(
         run_id=run_id,
         num_epochs=num_epochs,
         initial_learning_rate=INITIAL_LEARNING_RATE,
-        weight_decay=WEIGHT_DECAY)
+        weight_decay=WEIGHT_DECAY,
+        dataloader=dataloader)
 
 
 # (restrict tensorflow memory growth)

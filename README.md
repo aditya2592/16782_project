@@ -58,3 +58,25 @@ cp ~/.ros/start_states.txt experiments/
 3. Change number of paths you need to generate plans for (start/goal pairs) in ```config/walker_right_arm.yaml``` in the ```end_planning_episode variable```. Set to 499 to generate for all start/goal pairs. **By default this is set to 0 to visualize plan for the first start/goal pair only**
 4. Run planner and verify in RVIZ :
 ```roslaunch walker_planner mrmhaplanner.launch```
+
+Creating Dataset
+----------------
+1. Go to cvae folder
+2. Run the following to generate clean dataset for env '1' located in 'data/train'
+```
+source activate.sh
+python create_data.py --env 0
+```
+3. Run following to generate clean dataset for all env located in 'data/train'
+```
+source activate.sh
+python create_data.py
+```
+
+Training CVAE
+-------------
+1. Go to cvae folder.
+2. Run following command to run for base cvae
+```
+python run.py --dataset_root ../data/train_clean --num_epochs 50 --dataset_type base
+```

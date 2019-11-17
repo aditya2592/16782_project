@@ -15,6 +15,7 @@ def label_traj(complete_sample_path, complete_env_path, complete_directory_clean
                 
                 initialized = False
                 line = f.readline()
+                line = f.readline()
                 
                 while line:
                     # import pdb

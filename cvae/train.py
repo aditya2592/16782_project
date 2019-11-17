@@ -1,3 +1,5 @@
+# https://github.com/StanfordASL/LearnedSamplingDistributions
+
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -55,7 +57,7 @@ X_test = data[numTrain:numEntries,0:dim]
 c_test = data[numTrain:numEntries,dim:dataElements]
 numTest = X_test.shape[0]
 
- change conditions to occupancy grid
+# change conditions to occupancy grid
 def isSampleFree(sample, obs):
     for o in range(0,obs.shape[0]/(2*dimW)):
         isFree = 0

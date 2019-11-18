@@ -24,6 +24,7 @@ def load_dataset(dataset_root, data_type="arm"):
     for env_dir_index in filter(lambda f: f[0].isdigit(), env_dir_paths):
         env_paths_file = os.path.join(dataset_root, env_dir_index, "data_{}.txt".format(data_type))
         env_paths = np.loadtxt(env_paths_file)
+        # print(env_paths.shape)
         # Take only required elements
         env_paths = env_paths[:, :X_DIM + C_DIM]
         # Uniquify to remove duplicates
@@ -37,7 +38,7 @@ def load_dataset(dataset_root, data_type="arm"):
     dataloader = DataLoader(paths_dataset, batch_size=BATCH_SIZE, shuffle=True)
     return dataloader
 
-def plot(x, c):
+def plot(x, c, walls=True):
     # print(c)
     start = c[0:2]
     goal = c[2:4]
@@ -47,12 +48,30 @@ def plot(x, c):
     plt.scatter(x[:, 0], x[:, 1], color="green", s=70, alpha=0.1)
     plt.scatter(start[0], start[1], color="blue", s=70, alpha=0.6)
     plt.scatter(goal[0], goal[1], color="red", s=70, alpha=0.6)
+    if walls:
+        wall_locs = c[4:]
+        i = 0
+        while i < wall_locs.shape[0]:
+            plt.scatter(wall_locs[i], wall_locs[i+1], color="yellow", s=70, alpha=0.6)
+            i = i + 2
+
     plt.xlim(0, X_MAX)
     plt.ylim(0, Y_MAX)
     plt.savefig('fig_test.png')
     # plt.show()
-    plt.close(fig1)
+    # plt.close(fig1)
+    return fig1
 
+def test(dataloader=None):
+    arm_cvae = CVAE(run_id=run_id)
+    arm_decoder_path = 'experiments/cvae/arm/decoder-final.pkl'
+    arm_cvae.load_decoder(arm_decoder_path)
+
+    base_cvae = CVAE(run_id=run_id)
+    base_decoder_path = 'experiments/cvae/base/decoder-final.pkl'
+    base_cvae.load_decoder(base_decoder_path)
+
+    # for iteration, batch in enumerate(dataloader):
 
 def train(
         run_id=1,
@@ -68,6 +87,7 @@ def train(
     for epoch in range(num_epochs):
         for iteration, batch in enumerate(dataloader):
             # print(batch['state'].shape)
+            cvae.set_train()
             x = batch['state'].float().to(device)
             c = batch['condition'].float().to(device)
             recon_x, mean, log_var, z = cvae(x, c)
@@ -79,15 +99,26 @@ def train(
             loss.backward()
             optimizer.step()
 
+            counter = epoch * len(dataloader) + iteration
             if iteration % LOG_INTERVAL == 0 or iteration == len(dataloader)-1:
-                print("Epoch {:02d}/{:02d} Batch {:04d}/{:d}, Loss {:9.4f}".format(
-                    epoch, num_epochs, iteration, len(dataloader)-1, loss.item()))
+                print("Epoch {:02d}/{:02d} Batch {:04d}/{:d}, Iteration {}, Loss {:9.4f}".format(
+                    epoch, num_epochs, iteration, len(dataloader)-1, counter, loss.item()))
+                cvae.tboard.add_scalar('train/loss', loss.item(), counter)
+
             if iteration % TEST_INTERVAL == 0 or iteration == len(dataloader)-1:
                 # Test CVAE for one c from this batch by drawing samples
+                cvae.set_eval()
                 c_test = c[0,:]
-                x_test = cvae.inference(n=100, c=c_test)
+                x_test = cvae.inference(n=TEST_SAMPLES, c=c_test)
                 x_test = x_test.detach().cpu().numpy()
-                plot(x_test, c_test)
+                fig = plot(x_test, c_test)
+                cvae.tboard.add_figure('test/samples', fig, counter)
+            
+            if iteration % SAVE_INTERVAL == 0:
+                cvae.save_model_weights(counter)
+
+    cvae.save_model_weights('final')
+    
 
 def parse_arguments():
     # Command-line flags are defined here.

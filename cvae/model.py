@@ -140,6 +140,14 @@ class CVAE(nn.Module):
                 os.makedirs(self.tf_path)
             self.tboard = SummaryWriter(self.tf_path)
 
+    def set_train(self):
+        self.encoder.train()
+        self.decoder.train()
+
+    def set_eval(self):
+        self.encoder.eval()
+        self.decoder.eval()
+
     def update_learning_rate(self, lr):
         for optimizer in self.optimizers:
             for param_group in optimizer.param_groups:
@@ -154,13 +162,18 @@ class CVAE(nn.Module):
             self.current_lr = this_lr
             self.update_learning_rate(self.current_lr)
 
-    def load(self, model_path):
-        self.model.load_state_dict(torch.load(model_path)['state_dict'])
+    def load_encoder(self, model_path):
+        self.encoder.load_state_dict(torch.load(model_path)['state_dict'])
+
+    def load_decoder(self, model_path):
+        self.decoder.load_state_dict(torch.load(model_path)['state_dict'])
 
     def save_model_weights(self, suffix):
         # Helper function to save your model / weights.
-        model_path = os.path.join(self.experiment_path_prefix, self.run_id, 'model-{}.pkl'.format(suffix))
-        torch.save({'state_dict': self.model.state_dict()}, model_path)
+        model_path = os.path.join(self.experiment_path_prefix, self.run_id, 'encoder-{}.pkl'.format(suffix))
+        torch.save({'state_dict': self.encoder.state_dict()}, model_path)
+        model_path = os.path.join(self.experiment_path_prefix, self.run_id, 'decoder-{}.pkl'.format(suffix))
+        torch.save({'state_dict': self.decoder.state_dict()}, model_path)
 
     def forward(self, x, c=None):
         if x.dim() > 2:

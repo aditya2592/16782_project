@@ -12,16 +12,16 @@ def get_walls(complete_env_path):
         count = 0
         while line:
             if "wall" in line:
-                wall = line.strip(" ").strip("\n").split(" ")[1:]
+                wall = line.strip(" ").strip("\n").split(" ")[1:3]
                 walls.extend(wall)
                 count = count + 1
             
             line = e.readline()
         
         # padding
-        while count < 20:
-            walls.extend(["0"] * 6)
-            count = count + 1
+        # while count < 20:
+        #     walls.extend(["0"] * 6)
+        #     count = count + 1
         
         
     return walls

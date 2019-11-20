@@ -56,7 +56,10 @@ cp ~/.ros/goal_* experiments
 cp ~/.ros/start_states.txt experiments/
 ```
 3. Change number of paths you need to generate plans for (start/goal pairs) in ```config/walker_right_arm.yaml``` in the ```end_planning_episode variable```. Set to 499 to generate for all start/goal pairs. **By default this is set to 0 to visualize plan for the first start/goal pair only**
-4. Run planner and verify in RVIZ :
+
+4. Check that your ROS_HOME variable points to ```~/.ros```.  In your .ros run ```mkdir paths```. (This is where the solutions are stored).
+
+5. Run planner and verify in RVIZ :
 ```roslaunch walker_planner mrmhaplanner.launch```
 
 Creating Dataset

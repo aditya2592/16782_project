@@ -18,7 +18,7 @@ from paths_dataset import PathsDataset
 
 
 class CVAEInterface():
-    def __init__(self):
+    def __init__(self, run_id=1):
         super().__init__()
         self.cvae = CVAE(run_id=run_id)
         self.device = torch.device('cuda' if CUDA_AVAILABLE else 'cpu')
@@ -197,7 +197,7 @@ if __name__ == "__main__":
     dataset_type = args.dataset_type
 
     print("CUDA_AVAILABLE : {}".format(CUDA_AVAILABLE))
-    cvae_interface = CVAEInterface()
+    cvae_interface = CVAEInterface(run_id=run_id)
     dataloader, c_test_dataloader = cvae_interface.load_dataset(
                                                         dataset_root,
                                                         data_type=dataset_type)

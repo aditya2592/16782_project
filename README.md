@@ -82,7 +82,15 @@ python create_data.py
 Training CVAE
 -------------
 1. Go to cvae folder.
-2. Run following command to run for base cvae
+2. Run following command to run for training base cvae
 ```
-python run.py --dataset_root ../data/train_clean --num_epochs 50 --dataset_type base
+python run.py --dataset_root ../data/train_clean --num_epochs 50 --dataset_type base --run_od base_cvae
+```
+
+Testing CVAE
+------------
+1. Go to cvae folder
+2. Run following command to load saved decoder model and run :
+```
+python run.py --dataset_type arm --test_only --dataset_root ../data/train_clean --decoder_path experiments/cvae/arm_walls_new_test_more_data/decoder-final.pkl --run_id test_only
 ```

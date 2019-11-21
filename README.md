@@ -77,7 +77,7 @@ python create_data.py
 ```
 4. Data will be dumped in following format in two .txt files - 'data_base.txt' and 'data_arm.txt':
 ```
-2 (sample x,y) + 2 (start x,y) + 2 (goal x,y) + 20*6 (walls, x,y,z of center, l,b,h)
+2 (sample x,y) + 2 (start x,y) + 2 (goal x,y) + 20*2 (walls, x,y computed from x,y,z,l,b,h)
 ```
 Training CVAE
 -------------

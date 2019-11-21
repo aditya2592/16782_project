@@ -18,20 +18,25 @@ class PathsDataset(Dataset):
     for batch_idx, sampled_batch in enumerate(dataloader):
         # do stuff here using sampled_batch.
     """
-    def __init__(self):
+    def __init__(self, type="FULL_STATE"):
+        super().__init__()
         self.num_paths = 0
         self.paths = []
+        self.type = type
         self.device = torch.device('cuda' if CUDA_AVAILABLE else 'cpu')
 
     def __len__(self):
         return len(self.paths)
 
     def __getitem__(self, idx):
-        return {
-            'env': self.paths[idx][0],
-            'state': np.array(self.paths[idx][1:3]),
-            'condition': np.array(self.paths[idx][3:]),
-        }
+        if self.type == "FULL_STATE":
+            return {
+                'env': self.paths[idx][0],
+                'state': np.array(self.paths[idx][1:3]),
+                'condition': np.array(self.paths[idx][3:]),
+            }
+        elif self.type == "CONDITION_ONLY":
+            return np.array(self.paths[idx])
 
     def get_batch(self, batch_size):
         # Randomly sample batch_size examples

@@ -132,7 +132,8 @@ class CVAE(nn.Module):
         self.run_id = run_id
         self.experiment_path_prefix = experiment_path_prefix
         if self.cuda_available:
-            self.models = [self.models[i].cuda() for i in range(self.num_nets)]
+            self.encoder = self.encoder.cuda()
+            self.decoder = self.decoder.cuda()
         if self.use_tboard:
             from tensorboardX import SummaryWriter
             self.tf_path = '{}/{}/{}/'.format(self.experiment_path_prefix, self.run_id, self.tf_sub_path)
@@ -140,11 +141,11 @@ class CVAE(nn.Module):
                 os.makedirs(self.tf_path)
             self.tboard = SummaryWriter(self.tf_path)
 
-    def set_train(self):
+    def train(self):
         self.encoder.train()
         self.decoder.train()
 
-    def set_eval(self):
+    def eval(self):
         self.encoder.eval()
         self.decoder.eval()
 
@@ -183,8 +184,8 @@ class CVAE(nn.Module):
 
         means, log_var = self.encoder(x, c)
 
-        std = torch.exp(0.5 * log_var)
-        eps = torch.randn([batch_size, self.latent_dim])
+        std = torch.exp(0.5 * log_var).to(self.device)
+        eps = torch.randn([batch_size, self.latent_dim]).to(self.device)
 
         # Reparametrize 
         z = eps * std + means
@@ -192,11 +193,16 @@ class CVAE(nn.Module):
         recon_x = self.decoder(z, c)
         return recon_x, means, log_var, z
 
-    def inference(self, n=1, c=None):
-        batch_size = n
-        z = torch.randn([batch_size, self.latent_dim])
-        c = c.unsqueeze(dim=0)
-        c = torch.cat(batch_size * [c])
+    def batch_inference(self, c=None):
+        # Do inference for a batch of repeated Conditions
+        z = torch.randn([c.shape[0], self.latent_dim]).to(self.device)
+        recon_x = self.decoder(z, c)
+        return recon_x
+
+    def inference(self, sample_size=1, c=None):
+        # Do inference for a list of given unique Conditions
+        z = torch.randn([sample_size * c.shape[0], self.latent_dim]).to(self.device)
+        c = torch.repeat_interleave(c, repeats=sample_size, dim=0)
         recon_x = self.decoder(z, c)
         return recon_x
 

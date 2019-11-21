@@ -80,14 +80,12 @@ class CVAEInterface():
         # plt.close(fig1)
         return fig1
 
-    def load_saved_cvae(self, c_test_data=None):
-        arm_cvae = CVAE(run_id=run_id)
-        arm_decoder_path = 'experiments/cvae/arm/decoder-final.pkl'
-        arm_cvae.load_decoder(arm_decoder_path)
+    def load_saved_cvae(self, decoder_path):
+        self.cvae.load_decoder(decoder_path)
 
-        base_cvae = CVAE(run_id=run_id)
-        base_decoder_path = 'experiments/cvae/base/decoder-final.pkl'
-        base_cvae.load_decoder(base_decoder_path)
+        # base_cvae = CVAE(run_id=run_id)
+        # base_decoder_path = 'experiments/cvae/base/decoder-final.pkl'
+        # base_cvae.load_decoder(base_decoder_path)
 
         # for iteration, batch in enumerate(dataloader):
 
@@ -173,7 +171,7 @@ class CVAEInterface():
                 # Test CVAE for all c by drawing samples
                 self.test(c_test_dataloader, epoch)
                 
-            if epoch % SAVE_INTERVAL == 0:
+            if epoch % SAVE_INTERVAL == 0 and epoch > 0:
                 self.cvae.save_model_weights(counter)
 
         self.cvae.save_model_weights('final')
@@ -187,6 +185,8 @@ def parse_arguments():
     parser.add_argument('--dataset_root', dest='dataset_root', type=str)
     parser.add_argument('--dataset_type', dest='dataset_type', type=str, help='choose arm/base', default='arm')
     parser.add_argument('--exp_path_prefix', dest='experiment_path_prefix', type=str)
+    parser.add_argument('--test_only', dest='test_only', action='store_true', help="Whether to use saved model and run test only")
+    parser.add_argument('--decoder_path', dest='decoder_path', type=str, help='path to decoder model')
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -195,14 +195,19 @@ if __name__ == "__main__":
     num_epochs = args.num_epochs
     dataset_root = args.dataset_root
     dataset_type = args.dataset_type
+    test_only = args.test_only
+    decoder_path = args.decoder_path
 
     print("CUDA_AVAILABLE : {}".format(CUDA_AVAILABLE))
     cvae_interface = CVAEInterface(run_id=run_id)
     dataloader, c_test_dataloader = cvae_interface.load_dataset(
                                                         dataset_root,
                                                         data_type=dataset_type)
-
-    cvae_interface.train(
+    if test_only:
+        cvae_interface.load_saved_cvae(decoder_path)
+        cvae_interface.test(c_test_dataloader, 0)
+    else:
+        cvae_interface.train(
                     run_id=run_id,
                     num_epochs=num_epochs,
                     initial_learning_rate=INITIAL_LEARNING_RATE,

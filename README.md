@@ -84,7 +84,7 @@ python create_data.py
 Training CVAE
 -------------
 1. Go to cvae folder.
-2. Run following command to run for training base cvae
+2. Run following command to run for training base cvae. Tensorboard outputs are stored in 'experiments/cvae/{run_id}'
 ```
 python run.py --dataset_root ../data/train_clean --num_epochs 50 --dataset_type base --run_od base_cvae
 ```
@@ -92,7 +92,13 @@ python run.py --dataset_root ../data/train_clean --num_epochs 50 --dataset_type 
 Testing CVAE
 ------------
 1. Go to cvae folder
-2. Run following command to load saved decoder model and run :
-```
-python run.py --dataset_type arm --test_only --dataset_root ../data/train_clean --decoder_path experiments/cvae/arm_walls_new_test_more_data/decoder-final.pkl --run_id test_only
-```
+2. Run following command to load saved decoder model and run. This will plot on tensorboard and also save files in the output_path directory :
+  * For arm :
+  ```
+  python run.py --dataset_type arm --test_only --dataset_root ../data/train_clean --decoder_path experiments/cvae/arm_walls_new_test_more_data/decoder-final.pkl --run_id test_arm --output_path arm_output
+  ```
+  * For base :
+  ```
+  python run.py --dataset_type base --test_only --dataset_root ../data/train_clean --decoder_path experiments/cvae/base_walls_new_test_more_data/decoder-final.pkl --run_id test_b
+  ase --output_path base_output
+  ```

@@ -9,23 +9,211 @@ import csv
 from random import randint, random
 import time
 import argparse
+from torch.utils.data import DataLoader
+import torch.nn.functional as F
 
 from model import CVAE
+from model_constants import *
+from paths_dataset import PathsDataset
+
+
+class CVAEInterface():
+    def __init__(self, run_id=1):
+        super().__init__()
+        self.cvae = CVAE(run_id=run_id)
+        self.device = torch.device('cuda' if CUDA_AVAILABLE else 'cpu')
+
+
+
+    def load_dataset(self, dataset_root, data_type="arm"):
+        paths_dataset = PathsDataset(type="FULL_STATE")
+        c_test_dataset = PathsDataset(type="CONDITION_ONLY")
+        env_dir_paths = os.listdir(dataset_root)
+        # Get all C vars to test sample generation on each
+        all_condition_vars = []
+        for env_dir_index in filter(lambda f: f[0].isdigit(), env_dir_paths):
+            env_paths_file = os.path.join(dataset_root, env_dir_index, "data_{}.txt".format(data_type))
+            env_paths = np.loadtxt(env_paths_file)
+            all_condition_vars += env_paths[:,X_DIM:].tolist()
+            # print(env_paths.shape)
+            # Take only required elements
+            env_paths = env_paths[:, :X_DIM + C_DIM]
+            # Uniquify to remove duplicates
+            env_paths = np.unique(env_paths, axis=0)
+            env_index = np.empty((env_paths.shape[0], 1))
+            env_index.fill(env_dir_index)
+            data = np.hstack((env_index, env_paths))
+            paths_dataset.add_env_paths(data.tolist())
+            print("Added {} states from {} environment".format(env_paths.shape[0], env_dir_index))
+
+        dataloader = DataLoader(paths_dataset, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
+
+        self.all_condition_vars = np.unique(all_condition_vars, axis=0)
+        print("Unique test conditions count : {}".format(self.all_condition_vars.shape[0]))
+        all_condition_vars_tile = np.repeat(self.all_condition_vars, TEST_SAMPLES, 0)
+        c_test_dataset.add_env_paths(all_condition_vars_tile.tolist())
+        c_test_dataloader = DataLoader(c_test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
+
+        return dataloader, c_test_dataloader
+
+    def plot(self, x, c, walls=True):
+        # print(c)
+        start = c[0:2]
+        goal = c[2:4]
+        # For given conditional, plot the samples
+        fig1 = plt.figure(figsize=(10, 6), dpi=80)
+        ax1 = fig1.add_subplot(111, aspect='equal')
+        plt.scatter(x[:, 0], x[:, 1], color="green", s=70, alpha=0.1)
+        plt.scatter(start[0], start[1], color="blue", s=70, alpha=0.6)
+        plt.scatter(goal[0], goal[1], color="red", s=70, alpha=0.6)
+        if walls:
+            wall_locs = c[4:]
+            i = 0
+            while i < wall_locs.shape[0]:
+                plt.scatter(wall_locs[i], wall_locs[i+1], color="yellow", s=70, alpha=0.6)
+                i = i + 2
+
+        plt.xlim(0, X_MAX)
+        plt.ylim(0, Y_MAX)
+        # plt.savefig('fig_test.png')
+        # plt.show()
+        # plt.close(fig1)
+        return fig1
+
+    def load_saved_cvae(self, decoder_path):
+        self.cvae.load_decoder(decoder_path)
+
+        # base_cvae = CVAE(run_id=run_id)
+        # base_decoder_path = 'experiments/cvae/base/decoder-final.pkl'
+        # base_cvae.load_decoder(base_decoder_path)
+
+        # for iteration, batch in enumerate(dataloader):
+
+    def test(self,
+            dataloader,
+            epoch):
+
+        x_test_predicted = []
+        self.cvae.eval()
+        for iteration, batch in enumerate(dataloader):
+            # print(batch)
+            c_test_data = batch.float().to(self.device)
+            x_test = self.cvae.batch_inference(c=c_test_data)
+            x_test_predicted += x_test.detach().cpu().numpy().tolist()
+            # print(x_test.shape)
+            if iteration % LOG_INTERVAL == 0 or iteration == len(dataloader)-1:
+                print("Test Epoch {:02d}/{:02d} Batch {:04d}/{:d}, Iteration {}".format(
+                    epoch, num_epochs, iteration, len(dataloader)-1, iteration))
+
+        x_test_predicted = np.array(x_test_predicted)
+        # print(x_test_predicted.shape)
+        # Draw plot for each unique condition
+        for c_i in range(self.all_condition_vars.shape[0]):
+            x_test = x_test_predicted[c_i * TEST_SAMPLES : (c_i + 1) * TEST_SAMPLES]
+            c_test = self.all_condition_vars[c_i, :]
+            fig = self.plot(x_test, c_test)
+            self.cvae.tboard.add_figure('test_epoch_{}/condition_{}'.format(epoch, c_i), fig, 0)
+            if c_i % LOG_INTERVAL == 0:
+                print("Plotting condition : {}".format(c_i))
+        self.cvae.tboard.flush()
+
+        # for c_i in range(c_test_data.shape[0]):
+        #     c_test = c_test_data[c_i,:]
+        #     c_test_gpu = torch.from_numpy(c_test).float().to(device)
+            
+        #     x_test = cvae_model.inference(n=TEST_SAMPLES, c=c_test_gpu)
+        #     x_test = x_test.detach().cpu().numpy()
+        #     fig = plot(x_test, c_test)
+        #     cvae_model.tboard.add_figure('test_epoch_{}/condition_{}'.format(epoch, c_i), fig, 0)
+
+        #     if c_i % 50 == 0:
+        #         print("Epoch : {}, Testing condition count : {} ".format(epoch, c_i))
+
+
+    def train(self,
+            run_id=1,
+            num_epochs=1,
+            initial_learning_rate=0.001,
+            weight_decay=0.0001,
+            dataloader=None,
+            c_test_dataloader=None):
+        
+        optimizer = torch.optim.Adam(self.cvae.parameters(), lr=initial_learning_rate, weight_decay=weight_decay)
+        for epoch in range(num_epochs):
+            for iteration, batch in enumerate(dataloader):
+                # print(batch['state'].shape)
+                self.cvae.train()
+                x = batch['state'].float().to(self.device)
+                c = batch['condition'].float().to(self.device)
+                recon_x, mean, log_var, z = self.cvae(x, c)
+                # print(recon_x.shape)
+
+                loss = self.cvae.loss_fn(recon_x, x, mean, log_var)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                counter = epoch * len(dataloader) + iteration
+                if iteration % LOG_INTERVAL == 0 or iteration == len(dataloader)-1:
+                    print("Train Epoch {:02d}/{:02d} Batch {:04d}/{:d}, Iteration {}, Loss {:9.4f}".format(
+                        epoch, num_epochs, iteration, len(dataloader)-1, counter, loss.item()))
+                    self.cvae.tboard.add_scalar('train/loss', loss.item(), counter)
+
+                    # cvae.eval()
+                    # c_test = c[0,:]
+                    # x_test = cvae.inference(n=TEST_SAMPLES, c=c_test)
+                    # x_test = x_test.detach().cpu().numpy()
+                    # fig = plot(x_test, c_test)
+                    # cvae.tboard.add_figure('test/samples', fig, counter)
+
+            if epoch % TEST_INTERVAL == 0 or epoch == num_epochs - 1:
+                # Test CVAE for all c by drawing samples
+                self.test(c_test_dataloader, epoch)
+                
+            if epoch % SAVE_INTERVAL == 0 and epoch > 0:
+                self.cvae.save_model_weights(counter)
+
+        self.cvae.save_model_weights('final')
+    
 
 def parse_arguments():
     # Command-line flags are defined here.
     parser = argparse.ArgumentParser()
     parser.add_argument('--run_id', dest='run_id', type=str, default=1)
+    parser.add_argument('--num_epochs', dest='num_epochs', type=int, default=10)
+    parser.add_argument('--dataset_root', dest='dataset_root', type=str)
+    parser.add_argument('--dataset_type', dest='dataset_type', type=str, help='choose arm/base', default='arm')
     parser.add_argument('--exp_path_prefix', dest='experiment_path_prefix', type=str)
+    parser.add_argument('--test_only', dest='test_only', action='store_true', help="Whether to use saved model and run test only")
+    parser.add_argument('--decoder_path', dest='decoder_path', type=str, help='path to decoder model')
     return parser.parse_args()
-
-def train(run_id=1):
-    model = CVAE(run_id=run_id)
 
 if __name__ == "__main__":
     args = parse_arguments()
     run_id = args.run_id
-    train(run_id=run_id)
+    num_epochs = args.num_epochs
+    dataset_root = args.dataset_root
+    dataset_type = args.dataset_type
+    test_only = args.test_only
+    decoder_path = args.decoder_path
+
+    print("CUDA_AVAILABLE : {}".format(CUDA_AVAILABLE))
+    cvae_interface = CVAEInterface(run_id=run_id)
+    dataloader, c_test_dataloader = cvae_interface.load_dataset(
+                                                        dataset_root,
+                                                        data_type=dataset_type)
+    if test_only:
+        cvae_interface.load_saved_cvae(decoder_path)
+        cvae_interface.test(c_test_dataloader, 0)
+    else:
+        cvae_interface.train(
+                    run_id=run_id,
+                    num_epochs=num_epochs,
+                    initial_learning_rate=INITIAL_LEARNING_RATE,
+                    weight_decay=WEIGHT_DECAY,
+                    dataloader=dataloader,
+                    c_test_dataloader=c_test_dataloader)
 
 
 # (restrict tensorflow memory growth)

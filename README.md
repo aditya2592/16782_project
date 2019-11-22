@@ -28,6 +28,8 @@ make install
 5. Install also :
 ```
 sudo apt-get install ros-kinetic-trac-ik 
+sudo apt-get install libompl-dev
+sudo apt-get install libgsl-dev
 ```
 6. Build only our package: 
 ```catkin build walker_planner```
@@ -56,5 +58,41 @@ cp ~/.ros/goal_* experiments
 cp ~/.ros/start_states.txt experiments/
 ```
 3. Change number of paths you need to generate plans for (start/goal pairs) in ```config/walker_right_arm.yaml``` in the ```end_planning_episode variable```. Set to 499 to generate for all start/goal pairs. **By default this is set to 0 to visualize plan for the first start/goal pair only**
-4. Run planner and verify in RVIZ :
+
+4. Check that your ROS_HOME variable points to ```~/.ros```.  In your .ros run ```mkdir paths```. (This is where the solutions are stored).
+
+5. Run planner and verify in RVIZ :
 ```roslaunch walker_planner mrmhaplanner.launch```
+
+Creating Dataset
+----------------
+1. Go to cvae folder
+2. Run the following to generate clean dataset for env '1' located in 'data/train'
+```
+source activate.sh
+python create_data.py --env 0
+```
+3. Run following to generate clean dataset for all env located in 'data/train'
+```
+source activate.sh
+python create_data.py
+```
+4. Data will be dumped in following format in two .txt files - 'data_base.txt' and 'data_arm.txt':
+```
+2 (sample x,y) + 2 (start x,y) + 2 (goal x,y) + 20*2 (walls, x,y computed from x,y,z,l,b,h)
+```
+Training CVAE
+-------------
+1. Go to cvae folder.
+2. Run following command to run for training base cvae
+```
+python run.py --dataset_root ../data/train_clean --num_epochs 50 --dataset_type base --run_od base_cvae
+```
+
+Testing CVAE
+------------
+1. Go to cvae folder
+2. Run following command to load saved decoder model and run :
+```
+python run.py --dataset_type arm --test_only --dataset_root ../data/train_clean --decoder_path experiments/cvae/arm_walls_new_test_more_data/decoder-final.pkl --run_id test_only
+```

@@ -17,8 +17,6 @@ class Encoder(nn.Module):
         super().__init__()
 
         self.conditional = conditional
-        if self.conditional:
-            layer_sizes[0] += num_labels
 
         self.MLP = nn.Sequential()
 
@@ -29,11 +27,21 @@ class Encoder(nn.Module):
 
         self.linear_means = nn.Linear(layer_sizes[-1], latent_dim)
         self.linear_log_var = nn.Linear(layer_sizes[-1], latent_dim)
+  
+    def idx2onehot(self, idx, n):
+        assert torch.max(idx).item() < n
+        if idx.dim() == 1:
+            idx = idx.unsqueeze(1)
+
+        onehot = torch.zeros(idx.size(0), n)
+        onehot.scatter_(1, idx, 1)
+
+        return onehot
 
     def forward(self, x, c=None):
 
         if self.conditional:
-            c = idx2onehot(c, n=10)
+            # c = self.idx2onehot(c, n=C_DIM)
             x = torch.cat((x, c), dim=-1)
 
         x = self.MLP(x)
@@ -64,12 +72,13 @@ class Decoder(nn.Module):
             if i+1 < len(layer_sizes):
                 self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
             else:
-                self.MLP.add_module(name="sigmoid", module=nn.Sigmoid())
+                self.MLP.add_module(
+                    name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
 
     def forward(self, z, c):
 
         if self.conditional:
-            c = idx2onehot(c, n=10)
+            # c = idx2onehot(c, n=10)
             z = torch.cat((z, c), dim=-1)
 
         x = self.MLP(z)
@@ -79,8 +88,8 @@ class Decoder(nn.Module):
 class CVAE(nn.Module):
 
     def __init__(self,
-                 x_dmin=X_DIM,
-                 c_dmin=C_DIM,
+                 x_dim=X_DIM,
+                 c_dim=C_DIM,
                  latent_dim=LATENT_DIM,
                  run_id=1,
                  experiment_path_prefix=EXPERIMENT_PATH_PREFIX,
@@ -97,22 +106,20 @@ class CVAE(nn.Module):
         :param learning_rate:
         """
         super(CVAE, self).__init__()
-        self.x_dim = x_dmin
-        self.c_dim = c_dmin
+        self.x_dim = x_dim
+        self.c_dim = c_dim
         self.latent_dim = latent_dim
 
         self.cuda_available = cuda_available
         self.device = torch.device('cuda' if CUDA_AVAILABLE else 'cpu')
 
-
         self.hiddens = hiddens
-
-        self.model = self.create_network()
-
+        self.encoder_layer_sizes = [self.x_dim + self.c_dim] + self.hiddens
+        self.decoder_layer_sizes = self.hiddens + [self.x_dim] 
         self.encoder = Encoder(
-            hiddens, self.latent_dim, True, self.c_dim)
+            self.encoder_layer_sizes, self.latent_dim, True, self.c_dim)
         self.decoder = Decoder(
-            hiddens, self.latent_dim, True, self.c_dim)
+            self.decoder_layer_sizes, self.latent_dim, True, self.c_dim)
 
         print("Encoder : {}".format(self.encoder))
         print("Decoder : {}".format(self.decoder))
@@ -125,13 +132,22 @@ class CVAE(nn.Module):
         self.run_id = run_id
         self.experiment_path_prefix = experiment_path_prefix
         if self.cuda_available:
-            self.models = [self.models[i].cuda() for i in range(self.num_nets)]
+            self.encoder = self.encoder.cuda()
+            self.decoder = self.decoder.cuda()
         if self.use_tboard:
             from tensorboardX import SummaryWriter
             self.tf_path = '{}/{}/{}/'.format(self.experiment_path_prefix, self.run_id, self.tf_sub_path)
             if not os.path.exists(self.tf_path):
                 os.makedirs(self.tf_path)
             self.tboard = SummaryWriter(self.tf_path)
+
+    def train(self):
+        self.encoder.train()
+        self.decoder.train()
+
+    def eval(self):
+        self.encoder.eval()
+        self.decoder.eval()
 
     def update_learning_rate(self, lr):
         for optimizer in self.optimizers:
@@ -147,49 +163,53 @@ class CVAE(nn.Module):
             self.current_lr = this_lr
             self.update_learning_rate(self.current_lr)
 
-    def load(self, model_path):
-        self.model.load_state_dict(torch.load(model_path)['state_dict'])
+    def load_encoder(self, model_path):
+        self.encoder.load_state_dict(torch.load(model_path)['state_dict'])
+
+    def load_decoder(self, model_path):
+        self.decoder.load_state_dict(torch.load(model_path)['state_dict'])
 
     def save_model_weights(self, suffix):
         # Helper function to save your model / weights.
-        model_path = os.path.join(self.experiment_path_prefix, self.run_id, 'model-{}.pkl'.format(suffix))
-        torch.save({'state_dict': self.model.state_dict()}, model_path)
+        model_path = os.path.join(self.experiment_path_prefix, self.run_id, 'encoder-{}.pkl'.format(suffix))
+        torch.save({'state_dict': self.encoder.state_dict()}, model_path)
+        model_path = os.path.join(self.experiment_path_prefix, self.run_id, 'decoder-{}.pkl'.format(suffix))
+        torch.save({'state_dict': self.decoder.state_dict()}, model_path)
 
-    def predict(self, x, c, model_idx):
-        self.model.eval()
-        x = x.to(self.device)
-        c = c.to(self.device)
-        return self.model(torch.cat([x, c], dim=1))
+    def forward(self, x, c=None):
+        if x.dim() > 2:
+            x = x.view(-1, 28*28)
 
-    def forward(self, model_input):
-        self.model.train()
-        return self.model(model_input)
+        batch_size = x.size(0)
 
-    def create_network(self):
-        if len(self.hiddens) > 0:
-            modules = [
-                nn.Linear(self.x_dim + self.c_dim, self.hiddens[0]),
-                nn.ReLU(inplace=True)
-            ]
-            for i in range(1, len(self.hiddens)):
-                modules.extend([
-                    nn.Linear(self.hiddens[i - 1], self.hiddens[i]),
-                    nn.ReLU(inplace=True)
-                ])
-            modules.extend([nn.Linear(self.hiddens[-1], 2 * self.x_dim)])
-        else:
-            modules = [nn.Linear(self.x_dim + self.c_dim, 2 * self.x_dim)]
+        means, log_var = self.encoder(x, c)
 
-        model = nn.Sequential(*modules)
-        print(model)
-        return model
+        std = torch.exp(0.5 * log_var).to(self.device)
+        eps = torch.randn([batch_size, self.latent_dim]).to(self.device)
 
-    def train(self, replay_buffer, batch_size=128, epochs=5):
-        """
-        Arguments:
-          inputs: state and action inputs.  Assumes that inputs are standardized.
-          targets: resulting states
-        """
-        pass
+        # Reparametrize 
+        z = eps * std + means
 
-    # TODO: Write any helper functions that you need
+        recon_x = self.decoder(z, c)
+        return recon_x, means, log_var, z
+
+    def batch_inference(self, c=None):
+        # Do inference for a batch of repeated Conditions
+        z = torch.randn([c.shape[0], self.latent_dim]).to(self.device)
+        recon_x = self.decoder(z, c)
+        return recon_x
+
+    def inference(self, sample_size=1, c=None):
+        # Do inference for a list of given unique Conditions
+        z = torch.randn([sample_size * c.shape[0], self.latent_dim]).to(self.device)
+        c = torch.repeat_interleave(c, repeats=sample_size, dim=0)
+        recon_x = self.decoder(z, c)
+        return recon_x
+
+    def loss_fn(self, recon_x, x, mean, log_var):
+        # BCE = torch.nn.functional.binary_cross_entropy(
+        #     recon_x, x, reduction='sum')
+        MSE = torch.nn.functional.mse_loss(recon_x, x, reduction='sum')
+        KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
+
+        return (MSE + KLD) / x.size(0)

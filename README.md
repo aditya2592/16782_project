@@ -95,10 +95,10 @@ Testing CVAE
 2. Run following command to load saved decoder model and run. This will plot on tensorboard and also save files in the output_path directory :
   * For arm :
   ```
-  python run.py --dataset_type arm --test_only --dataset_root ../data/train_clean --decoder_path experiments/cvae/arm_walls_new_test_more_data/decoder-final.pkl --run_id test_arm --output_path arm_output
+  python run.py --dataset_type arm --test_only --dataset_root ../data/test_clean --decoder_path experiments/cvae/arm_walls_new_test_more_data/decoder-final.pkl --run_id test_arm --output_path arm_output
   ```
   * For base :
   ```
-  python run.py --dataset_type base --test_only --dataset_root ../data/train_clean --decoder_path experiments/cvae/base_walls_new_test_more_data/decoder-final.pkl --run_id test_b
+  python run.py --dataset_type base --test_only --dataset_root ../data/test_clean --decoder_path experiments/cvae/base_walls_new_test_more_data/decoder-final.pkl --run_id test_b
   ase --output_path base_output
   ```

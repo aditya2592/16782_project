@@ -67,17 +67,22 @@ cp ~/.ros/start_states.txt experiments/
 Creating Dataset
 ----------------
 1. Go to cvae folder
-2. Run the following to generate clean dataset for env '1' located in 'data/train'
+2. Run the following to generate clean dataset for env '1' only located in 'data/train'. Output is stored in 'data/train_clean'
 ```
 source activate.sh
-python create_data.py --env 0
+python create_data.py --env 1
 ```
-3. Run following to generate clean dataset for all env located in 'data/train'
+3. Run following to generate clean dataset for all env located in 'data/train'. Output is stored in 'data/train_clean'
 ```
 source activate.sh
 python create_data.py
 ```
-4. Data will be dumped in following format in two .txt files - 'data_base.txt' and 'data_arm.txt':
+4. Run following to generate clean test dataset for all env located in 'data/test'. Output is stored in 'data/test_clean'
+```
+source activate.sh
+python create_data.py --test
+```
+5. Data will be dumped in following format in two .txt files - 'data_base.txt' and 'data_arm.txt':
 ```
 2 (sample x,y) + 2 (start x,y) + 2 (goal x,y) + 20*2 (walls, x,y computed from x,y,z,l,b,h)
 ```

@@ -42,7 +42,7 @@ def get_start_goal(complete_sample_path):
     return start_angles, goal_angles
                     
 
-def label_traj(complete_sample_path, complete_env_path, complete_directory_clean, data_path_arm, data_path_base):
+def label_traj(complete_sample_path, complete_env_path, complete_directory_clean, data_path_arm, data_path_base, data_path_both):
     '''
         get arm and base labels from a single solution_path file
     '''
@@ -55,41 +55,46 @@ def label_traj(complete_sample_path, complete_env_path, complete_directory_clean
     
     with open(data_path_base, "a") as b:
         with open(data_path_arm, "a") as a:
-            with open(complete_sample_path, "r") as f:
-                prev_base_joint_angles = np.zeros([1, 3])
-                prev_arm_joint_angles = np.zeros([1, 7])
-                
-                initialized = False
-                line = f.readline()
-                line = f.readline()
-                
-                while line:
+            with open(data_path_both, "a") as c:
+                with open(complete_sample_path, "r") as f:
+                    prev_base_joint_angles = np.zeros([1, 3])
+                    prev_arm_joint_angles = np.zeros([1, 7])
                     
-                    joint_angles = line.strip("\n").strip(" ").split(" ")
-                    joint_angles = list(map((lambda x: float(x)),joint_angles))
+                    initialized = False
+                    line = f.readline()
+                    line = f.readline()
+                    
+                    while line:
+                        
+                        joint_angles = line.strip("\n").strip(" ").split(" ")
+                        joint_angles = list(map((lambda x: float(x)),joint_angles))
 
-                    base_joint_angles = np.array(joint_angles[:3])
-                    arm_joint_angles = np.array(joint_angles[3:])
-                    
-                    if initialized:
+                        base_joint_angles = np.array(joint_angles[:3])
+                        arm_joint_angles = np.array(joint_angles[3:])
+                        
+                        if initialized:
+                            prev_base_joint_angles = base_joint_angles
+                            prev_arm_joint_angles = arm_joint_angles
+                            initialized = True
+                            continue
+                        
+                        epsilon = 0
+                        base_moved = np.any(np.abs(base_joint_angles - prev_base_joint_angles) > epsilon)
+                        arm_moved = np.any(np.abs(arm_joint_angles - prev_arm_joint_angles) > epsilon)
+                        
+                        if base_moved:
+                            b.write("{} {} {}\n".format(joint_angles[0], joint_angles[1], conditions))
+                            # One hot encoding for training single cvae
+                            both_conditions = " ".join(start + goal + ["0", "1"] + walls)
+                        
+                        if arm_moved:
+                            a.write("{} {} {}\n".format(joint_angles[0], joint_angles[1], conditions))
+                            both_conditions = " ".join(start + goal + ["1", "0"] + walls)
+                            
+                        c.write("{} {} {}\n".format(joint_angles[0], joint_angles[1], both_conditions))
+                        line = f.readline()
                         prev_base_joint_angles = base_joint_angles
                         prev_arm_joint_angles = arm_joint_angles
-                        initialized = True
-                        continue
-                    
-                    epsilon = 0
-                    base_moved = np.any(np.abs(base_joint_angles - prev_base_joint_angles) > epsilon)
-                    arm_moved = np.any(np.abs(arm_joint_angles - prev_arm_joint_angles) > epsilon)
-                    
-                    if base_moved:
-                        b.write("{} {} {}\n".format(joint_angles[0], joint_angles[1], conditions))
-                    
-                    if arm_moved:
-                        a.write("{} {} {}\n".format(joint_angles[0], joint_angles[1], conditions))
-                        
-                    line = f.readline()
-                    prev_base_joint_angles = base_joint_angles
-                    prev_arm_joint_angles = arm_joint_angles
                     
 
 def parse_arguments():
@@ -149,5 +154,6 @@ if __name__ == "__main__":
                     
                     data_path_base = os.path.join(directory_clean, env_path, "data_base.txt")
                     data_path_arm = os.path.join(directory_clean, env_path, "data_arm.txt")
+                    data_path_both = os.path.join(directory_clean, env_path, "data_both.txt")
                     
-                    label_traj(complete_sample_path, complete_env_path, complete_directory_clean, data_path_arm, data_path_base)
+                    label_traj(complete_sample_path, complete_env_path, complete_directory_clean, data_path_arm, data_path_base, data_path_both)

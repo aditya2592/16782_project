@@ -1,6 +1,8 @@
 # walker_planner
 Planner for Wheeled Walker.
 
+Google Drive folder with stuff - https://drive.google.com/open?id=1duMPSww-KA-X_sNt09_XGf6uI1dzbjsR
+
 Setup
 ------
 
@@ -106,4 +108,12 @@ Testing CVAE
   ```
   python run.py --dataset_type base --test_only --dataset_root ../data/test_clean --decoder_path experiments/cvae/base_walls_new_test_more_data/decoder-final.pkl --run_id test_b
   ase --output_path base_output
+  ```
+  
+  File structure :
+  ```
+  arm_output/
+   start_goal_0.txt #Start/Goal x,y for this condition 0
+   gen_points_0.txt #Sampled points from ARM CVAE for this condition 0
+   gen_points_fig_0.png #Plotted sampled points for this condition 0
   ```

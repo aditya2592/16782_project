@@ -3,6 +3,9 @@ import os
 import shutil
 import argparse
 import yaml
+import matplotlib.pyplot as plt
+from matplotlib.collections import PatchCollection
+from matplotlib.patches import Rectangle
 
 def generateGap(gap_size, start, end):
     '''
@@ -69,7 +72,32 @@ def writeWallToFile(path, wall, index):
 def writeGapToFile(path, gap, index):
     with open(path, "a") as f:
         f.write("gap{} {}\n".format(index, " ".join(list(map((lambda x: str(x)),gap)))))
+
+def visualize(path, length, width):
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.title('Sample Map')
+    plt.xlim(0, length)
+    plt.ylim(0, width)
+    with open(path, "r") as f:
+        line = f.readline()
+        while line:
+            line = line.split(" ")
+            if "wall" in line[0]:
+                x = float(line[1])
+                y = float(line[2])
+                l = float(line[4])
+                b = float(line[5])
+
+                rect = Rectangle((x-l/2, y-b/2), l, b)
+                plt.gca().add_patch(rect)
+                
+            line = f.readline()
+    plt.draw()
+    plt.show()
     
+    plt.savefig("visualize.png")
+
 def generateRandomMap(path, config):
     '''
     '''
@@ -125,6 +153,8 @@ def generateRandomMap(path, config):
         
     for index, gap in enumerate(gaps):
         writeGapToFile(path, gap, index)
+        
+    visualize(path, length, width)
 
 def parse_arguments():
     '''

@@ -6,6 +6,8 @@ import shutil
 import itertools
 
 def get_walls(complete_env_path):
+    '''
+    '''
     with open(complete_env_path, "r") as e:
         line = e.readline()
         walls = []
@@ -23,10 +25,11 @@ def get_walls(complete_env_path):
             walls.extend(["0"] * 6)
             count = count + 1
         
-        
     return walls
 
 def get_start_goal(complete_sample_path):
+    '''
+    '''
     with open(complete_sample_path, "r") as f:
         
         line = f.readline()
@@ -46,7 +49,6 @@ def label_traj(complete_sample_path, complete_env_path, complete_directory_clean
     '''
         get arm and base labels from a single solution_path file
     '''
-    
     # create conditioning variable
     walls = get_walls(complete_env_path)
     start, goal = get_start_goal(complete_sample_path)

@@ -28,6 +28,8 @@ make install
 5. Install also :
 ```
 sudo apt-get install ros-kinetic-trac-ik 
+sudo apt-get install libompl-dev
+sudo apt-get install libgsl-dev
 ```
 6. Build only our package: 
 ```catkin build walker_planner```

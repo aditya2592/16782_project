@@ -11,6 +11,7 @@ import time
 import argparse
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
+import shutil
 
 from model import CVAE
 from model_constants import *
@@ -18,11 +19,16 @@ from paths_dataset import PathsDataset
 
 
 class CVAEInterface():
-    def __init__(self, run_id=1):
+    def __init__(self, run_id=1, output_path=""):
         super().__init__()
         self.cvae = CVAE(run_id=run_id)
         self.device = torch.device('cuda' if CUDA_AVAILABLE else 'cpu')
+        self.output_path = output_path
 
+        if os.path.exists(self.output_path):
+            shutil.rmtree(self.output_path)
+        os.mkdir(self.output_path)
+    
 
 
     def load_dataset(self, dataset_root, data_type="arm"):
@@ -56,7 +62,7 @@ class CVAEInterface():
 
         return dataloader, c_test_dataloader
 
-    def plot(self, x, c, walls=True):
+    def plot(self, x, c, walls=True, suffix=0, write_file=False):
         # print(c)
         start = c[0:2]
         goal = c[2:4]
@@ -75,7 +81,10 @@ class CVAEInterface():
 
         plt.xlim(0, X_MAX)
         plt.ylim(0, Y_MAX)
-        # plt.savefig('fig_test.png')
+        if write_file:
+            plt.savefig('{}/gen_points_fig_{}.png'.format(self.output_path, suffix))
+            np.savetxt('{}/gen_points_{}.txt'.format(self.output_path, suffix), x, fmt="%.2f", delimiter=',')
+            np.savetxt('{}/start_goal_{}.txt'.format(self.output_path, suffix), np.vstack((start, goal)), fmt="%.2f", delimiter=',')
         # plt.show()
         # plt.close(fig1)
         return fig1
@@ -111,7 +120,7 @@ class CVAEInterface():
         for c_i in range(self.all_condition_vars.shape[0]):
             x_test = x_test_predicted[c_i * TEST_SAMPLES : (c_i + 1) * TEST_SAMPLES]
             c_test = self.all_condition_vars[c_i, :]
-            fig = self.plot(x_test, c_test)
+            fig = self.plot(x_test, c_test, suffix=c_i, write_file=True)
             self.cvae.tboard.add_figure('test_epoch_{}/condition_{}'.format(epoch, c_i), fig, 0)
             if c_i % LOG_INTERVAL == 0:
                 print("Plotting condition : {}".format(c_i))
@@ -182,11 +191,11 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--run_id', dest='run_id', type=str, default=1)
     parser.add_argument('--num_epochs', dest='num_epochs', type=int, default=10)
-    parser.add_argument('--dataset_root', dest='dataset_root', type=str)
+    parser.add_argument('--dataset_root', dest='dataset_root', type=str, required=True)
     parser.add_argument('--dataset_type', dest='dataset_type', type=str, help='choose arm/base', default='arm')
-    parser.add_argument('--exp_path_prefix', dest='experiment_path_prefix', type=str)
     parser.add_argument('--test_only', dest='test_only', action='store_true', help="Whether to use saved model and run test only")
-    parser.add_argument('--decoder_path', dest='decoder_path', type=str, help='path to decoder model')
+    parser.add_argument('--decoder_path', dest='decoder_path', type=str, help='path to decoder model', default=None)
+    parser.add_argument('--output_path', dest='output_path', type=str, help='path to store output plots and files in test mode', default=None)
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -197,13 +206,20 @@ if __name__ == "__main__":
     dataset_type = args.dataset_type
     test_only = args.test_only
     decoder_path = args.decoder_path
+    output_path = args.output_path
+
+        
 
     print("CUDA_AVAILABLE : {}".format(CUDA_AVAILABLE))
-    cvae_interface = CVAEInterface(run_id=run_id)
+    cvae_interface = CVAEInterface(run_id=run_id,
+                                    output_path=output_path)
+
     dataloader, c_test_dataloader = cvae_interface.load_dataset(
                                                         dataset_root,
                                                         data_type=dataset_type)
     if test_only:
+        if decoder_path is None or output_path is None:
+            raise Exception("All inputs not provided for test mode")
         cvae_interface.load_saved_cvae(decoder_path)
         cvae_interface.test(c_test_dataloader, 0)
     else:

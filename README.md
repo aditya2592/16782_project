@@ -1,6 +1,8 @@
 # walker_planner
 Planner for Wheeled Walker.
 
+Google Drive folder with stuff - https://drive.google.com/open?id=1duMPSww-KA-X_sNt09_XGf6uI1dzbjsR
+
 Setup
 ------
 
@@ -67,24 +69,29 @@ cp ~/.ros/start_states.txt experiments/
 Creating Dataset
 ----------------
 1. Go to cvae folder
-2. Run the following to generate clean dataset for env '1' located in 'data/train'
+2. Run the following to generate clean dataset for env '1' only located in 'data/train'. Output is stored in 'data/train_clean'
 ```
 source activate.sh
-python create_data.py --env 0
+python create_data.py --env 1
 ```
-3. Run following to generate clean dataset for all env located in 'data/train'
+3. Run following to generate clean dataset for all env located in 'data/train'. Output is stored in 'data/train_clean'
 ```
 source activate.sh
 python create_data.py
 ```
-4. Data will be dumped in following format in two .txt files - 'data_base.txt' and 'data_arm.txt':
+4. Run following to generate clean test dataset for all env located in 'data/test'. Output is stored in 'data/test_clean'
+```
+source activate.sh
+python create_data.py --test
+```
+5. Data will be dumped in following format in two .txt files - 'data_base.txt' and 'data_arm.txt':
 ```
 2 (sample x,y) + 2 (start x,y) + 2 (goal x,y) + 20*2 (walls, x,y computed from x,y,z,l,b,h)
 ```
 Training CVAE
 -------------
 1. Go to cvae folder.
-2. Run following command to run for training base cvae
+2. Run following command to run for training base cvae. Tensorboard outputs are stored in 'experiments/cvae/{run_id}'
 ```
 python run.py --dataset_root ../data/train_clean --num_epochs 50 --dataset_type base --run_od base_cvae
 ```
@@ -92,7 +99,21 @@ python run.py --dataset_root ../data/train_clean --num_epochs 50 --dataset_type 
 Testing CVAE
 ------------
 1. Go to cvae folder
-2. Run following command to load saved decoder model and run :
-```
-python run.py --dataset_type arm --test_only --dataset_root ../data/train_clean --decoder_path experiments/cvae/arm_walls_new_test_more_data/decoder-final.pkl --run_id test_only
-```
+2. Run following command to load saved decoder model and run. This will plot on tensorboard and also save files in the output_path directory :
+  * For arm :
+  ```
+  python run.py --dataset_type arm --test_only --dataset_root ../data/test_clean --decoder_path experiments/cvae/arm_walls_new_test_more_data/decoder-final.pkl --run_id test_arm --output_path arm_output
+  ```
+  * For base :
+  ```
+  python run.py --dataset_type base --test_only --dataset_root ../data/test_clean --decoder_path experiments/cvae/base_walls_new_test_more_data/decoder-final.pkl --run_id test_b
+  ase --output_path base_output
+  ```
+  
+  File structure :
+  ```
+  arm_output/
+   start_goal_0.txt #Start/Goal x,y for this condition 0
+   gen_points_0.txt #Sampled points from ARM CVAE for this condition 0
+   gen_points_fig_0.png #Plotted sampled points for this condition 0
+  ```

@@ -120,13 +120,22 @@ def generateRandomMap(path, config):
     c_2_y = generateGap(gap_size, 0, width)
     
     # sample row 1
-    r_1_y = np.random.uniform(gap_size, width-gap_size)
+    r_1_y = np.random.uniform(gap_size*5, width-gap_size*5)
     
     # sample row 2
-    r_2_y = np.random.uniform(gap_size, width-gap_size)
+    r_2_y = np.random.uniform(gap_size*5, width-gap_size*5)
     
     # sample row 3
-    r_3_y = np.random.uniform(gap_size, width-gap_size)
+    r_3_y = np.random.uniform(gap_size*5, width-gap_size*5)
+    
+    # sample row 1
+    r_4_y = np.random.uniform(gap_size*5, width-gap_size*5)
+    
+    # sample row 2
+    r_5_y = np.random.uniform(gap_size*5, width-gap_size*5)
+    
+    # sample row 3
+    r_6_y = np.random.uniform(gap_size*5, width-gap_size*5)
     
     # sample gap in row 1
     r_1_x = generateGap(gap_size, 0, c_1_x)
@@ -137,16 +146,28 @@ def generateRandomMap(path, config):
     # sample gap in row 3
     r_3_x = generateGap(gap_size, c_2_x, length)
     
+    # sample gap in row 1
+    r_4_x = generateGap(gap_size, 0, c_1_x)
+    
+    # sample gap in row 2
+    r_5_x = generateGap(gap_size, c_1_x, c_2_x)
+    
+    # sample gap in row 3
+    r_6_x = generateGap(gap_size, c_2_x, length)
+    
     # generate walls and gaps
     wall1, wall2, gap1 = generateVerticalWall(c_1_y, c_1_x, height, thickness)
     wall3, wall4, gap2 = generateVerticalWall(c_2_y, c_2_x, height, thickness)
     wall5, wall6, gap3 = generateHorizontalWall(r_1_x, r_1_y, height, thickness)
     wall7, wall8, gap4 = generateHorizontalWall(r_2_x, r_2_y, height, thickness)
     wall9, wall10, gap5 = generateHorizontalWall(r_3_x, r_3_y, height, thickness)
+    wall11, wall12, gap6 = generateHorizontalWall(r_4_x, r_4_y, height, thickness)
+    wall13, wall14, gap7 = generateHorizontalWall(r_5_x, r_5_y, height, thickness)
+    wall15, wall16, gap8 = generateHorizontalWall(r_6_x, r_6_y, height, thickness)
     
     # write gaps and walls to file
-    walls = [wall1, wall2, wall3, wall4, wall5, wall6, wall7, wall8, wall9, wall10]
-    gaps = [gap1, gap2, gap3, gap4, gap5]
+    walls = [wall1, wall2, wall3, wall4, wall5, wall6, wall7, wall8, wall9, wall10, wall11, wall12, wall13, wall14, wall15, wall16]
+    gaps = [gap1, gap2, gap3, gap4, gap5, gap6, gap7, gap8]
     
     for index, wall in enumerate(walls):
         writeWallToFile(path, wall, index)
@@ -178,11 +199,10 @@ if __name__ == "__main__":
     
     with open('config.yaml') as f:
         config = yaml.load(f)
-    
-    if os.path.exists(directory):
-        shutil.rmtree(directory)
-    
-    os.mkdir(directory)
         
     path = os.path.join(directory,str(args.env)+".txt")
+    
+    if os.path.exists(path):
+        os.remove(path)
+    
     generateRandomMap(path, config)

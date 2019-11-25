@@ -25,13 +25,16 @@ class CVAEInterface():
         self.device = torch.device('cuda' if CUDA_AVAILABLE else 'cpu')
         self.output_path = output_path
 
-        if os.path.exists(self.output_path):
-            shutil.rmtree(self.output_path)
-        os.mkdir(self.output_path)
+        if self.output_path is not None:
+            if os.path.exists(self.output_path):
+                shutil.rmtree(self.output_path)
+            os.mkdir(self.output_path)
     
 
 
     def load_dataset(self, dataset_root, data_type="arm"):
+        self.data_type = data_type
+
         paths_dataset = PathsDataset(type="FULL_STATE")
         c_test_dataset = PathsDataset(type="CONDITION_ONLY")
         env_dir_paths = os.listdir(dataset_root)
@@ -40,7 +43,7 @@ class CVAEInterface():
         for env_dir_index in filter(lambda f: f[0].isdigit(), env_dir_paths):
             env_paths_file = os.path.join(dataset_root, env_dir_index, "data_{}.txt".format(data_type))
             env_paths = np.loadtxt(env_paths_file)
-            all_condition_vars += env_paths[:,X_DIM:].tolist()
+            all_condition_vars += env_paths[:,X_DIM:X_DIM+C_DIM].tolist()
             # print(env_paths.shape)
             # Take only required elements
             env_paths = env_paths[:, :X_DIM + C_DIM]
@@ -54,15 +57,46 @@ class CVAEInterface():
 
         dataloader = DataLoader(paths_dataset, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
 
-        self.all_condition_vars = np.unique(all_condition_vars, axis=0)
-        print("Unique test conditions count : {}".format(self.all_condition_vars.shape[0]))
-        all_condition_vars_tile = np.repeat(self.all_condition_vars, TEST_SAMPLES, 0)
-        c_test_dataset.add_env_paths(all_condition_vars_tile.tolist())
-        c_test_dataloader = DataLoader(c_test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
+        if data_type != "both":
+            self.all_condition_vars = np.unique(all_condition_vars, axis=0)
+            print("Unique test conditions count : {}".format(self.all_condition_vars.shape[0]))
+            all_condition_vars_tile = np.repeat(self.all_condition_vars, TEST_SAMPLES, 0)
+            c_test_dataset.add_env_paths(all_condition_vars_tile.tolist())
+            c_test_dataloader = DataLoader(c_test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
 
-        return dataloader, c_test_dataloader
+            self.train_dataloader = dataloader
+            self.test_dataloader = c_test_dataloader 
 
-    def plot(self, x, c, walls=True, suffix=0, write_file=False):
+        else:
+            arm_test_dataset = PathsDataset(type="CONDITION_ONLY")
+            base_test_dataset = PathsDataset(type="CONDITION_ONLY")
+
+            all_condition_vars = np.array(all_condition_vars)
+            self.all_condition_vars = np.delete(all_condition_vars, [4, 5], axis=1)
+            self.all_condition_vars = np.unique(self.all_condition_vars, axis=0)
+            print("Unique test conditions count : {}".format(self.all_condition_vars.shape[0]))
+            # print(self.all_condition_vars)
+            arm_condition_vars = np.insert(self.all_condition_vars, 2*POINT_DIM, 1, axis=1)
+            arm_condition_vars = np.insert(arm_condition_vars, 2*POINT_DIM, 0, axis=1)
+
+            arm_condition_vars = np.repeat(arm_condition_vars, TEST_SAMPLES, 0)
+            arm_test_dataset.add_env_paths(arm_condition_vars.tolist())
+            arm_test_dataloader = DataLoader(arm_test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
+
+            base_condition_vars = np.insert(self.all_condition_vars, 2*POINT_DIM, 0, axis=1)
+            base_condition_vars = np.insert(base_condition_vars, 2*POINT_DIM, 1, axis=1)
+
+            base_condition_vars = np.repeat(base_condition_vars, TEST_SAMPLES, 0)
+            base_test_dataset.add_env_paths(base_condition_vars.tolist())
+            base_test_dataloader = DataLoader(base_test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
+
+            self.train_dataloader = dataloader
+            self.arm_test_dataloader = arm_test_dataloader
+            self.base_test_dataloader = base_test_dataloader
+
+
+
+    def plot(self, x, c, walls=False, suffix=0, write_file=False):
         # print(c)
         start = c[0:2]
         goal = c[2:4]
@@ -98,15 +132,14 @@ class CVAEInterface():
 
         # for iteration, batch in enumerate(dataloader):
 
-    def test(self,
-            dataloader,
-            epoch):
+    def test(self, epoch, dataloader, write_file=False, suffix=""):
 
         x_test_predicted = []
         self.cvae.eval()
         for iteration, batch in enumerate(dataloader):
             # print(batch)
             c_test_data = batch.float().to(self.device)
+            # print(c_test_data[0,:])
             x_test = self.cvae.batch_inference(c=c_test_data)
             x_test_predicted += x_test.detach().cpu().numpy().tolist()
             # print(x_test.shape)
@@ -119,9 +152,10 @@ class CVAEInterface():
         # Draw plot for each unique condition
         for c_i in range(self.all_condition_vars.shape[0]):
             x_test = x_test_predicted[c_i * TEST_SAMPLES : (c_i + 1) * TEST_SAMPLES]
+            # Fine because c_test is used only for plotting, we dont need arm/base label here
             c_test = self.all_condition_vars[c_i, :]
-            fig = self.plot(x_test, c_test, suffix=c_i, write_file=True)
-            self.cvae.tboard.add_figure('test_epoch_{}/condition_{}'.format(epoch, c_i), fig, 0)
+            fig = self.plot(x_test, c_test, suffix=c_i, write_file=write_file)
+            self.cvae.tboard.add_figure('test_epoch_{}/condition_{}_{}'.format(epoch, c_i, suffix), fig, 0)
             if c_i % LOG_INTERVAL == 0:
                 print("Plotting condition : {}".format(c_i))
         self.cvae.tboard.flush()
@@ -143,14 +177,12 @@ class CVAEInterface():
             run_id=1,
             num_epochs=1,
             initial_learning_rate=0.001,
-            weight_decay=0.0001,
-            dataloader=None,
-            c_test_dataloader=None):
+            weight_decay=0.0001):
         
         optimizer = torch.optim.Adam(self.cvae.parameters(), lr=initial_learning_rate, weight_decay=weight_decay)
         for epoch in range(num_epochs):
-            for iteration, batch in enumerate(dataloader):
-                # print(batch['state'].shape)
+            for iteration, batch in enumerate(self.train_dataloader):
+                # print(batch['condition'][0,:])
                 self.cvae.train()
                 x = batch['state'].float().to(self.device)
                 c = batch['condition'].float().to(self.device)
@@ -163,10 +195,10 @@ class CVAEInterface():
                 loss.backward()
                 optimizer.step()
 
-                counter = epoch * len(dataloader) + iteration
-                if iteration % LOG_INTERVAL == 0 or iteration == len(dataloader)-1:
+                counter = epoch * len(self.train_dataloader) + iteration
+                if iteration % LOG_INTERVAL == 0 or iteration == len(self.train_dataloader)-1:
                     print("Train Epoch {:02d}/{:02d} Batch {:04d}/{:d}, Iteration {}, Loss {:9.4f}".format(
-                        epoch, num_epochs, iteration, len(dataloader)-1, counter, loss.item()))
+                        epoch, num_epochs, iteration, len(self.train_dataloader)-1, counter, loss.item()))
                     self.cvae.tboard.add_scalar('train/loss', loss.item(), counter)
 
                     # cvae.eval()
@@ -178,7 +210,12 @@ class CVAEInterface():
 
             if epoch % TEST_INTERVAL == 0 or epoch == num_epochs - 1:
                 # Test CVAE for all c by drawing samples
-                self.test(c_test_dataloader, epoch)
+                if self.data_type != "both":
+                    self.test(epoch, self.test_dataloader)
+                else:
+                    self.test(epoch, self.arm_test_dataloader, suffix="arm")
+                    self.test(epoch, self.base_test_dataloader, suffix="base")
+
                 
             if epoch % SAVE_INTERVAL == 0 and epoch > 0:
                 self.cvae.save_model_weights(counter)
@@ -214,22 +251,18 @@ if __name__ == "__main__":
     cvae_interface = CVAEInterface(run_id=run_id,
                                     output_path=output_path)
 
-    dataloader, c_test_dataloader = cvae_interface.load_dataset(
-                                                        dataset_root,
-                                                        data_type=dataset_type)
+    cvae_interface.load_dataset(dataset_root, data_type=dataset_type)
     if test_only:
         if decoder_path is None or output_path is None:
             raise Exception("All inputs not provided for test mode")
         cvae_interface.load_saved_cvae(decoder_path)
-        cvae_interface.test(c_test_dataloader, 0)
+        cvae_interface.test(0, cvae_interface.test_dataloader, write_file=True)
     else:
         cvae_interface.train(
                     run_id=run_id,
                     num_epochs=num_epochs,
                     initial_learning_rate=INITIAL_LEARNING_RATE,
-                    weight_decay=WEIGHT_DECAY,
-                    dataloader=dataloader,
-                    c_test_dataloader=c_test_dataloader)
+                    weight_decay=WEIGHT_DECAY)
 
 
 # (restrict tensorflow memory growth)

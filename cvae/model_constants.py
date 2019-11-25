@@ -9,7 +9,7 @@ EXPERIMENT_PATH_PREFIX = 'experiments/cvae'
 LOG_INTERVAL = 50
 
 # Below are per epoch
-TEST_INTERVAL = 20
+TEST_INTERVAL = 100
 SAVE_INTERVAL = 10000
 
 # Training params
@@ -30,8 +30,10 @@ POINT_DIM = 2
 
 # State params
 X_DIM = POINT_DIM
+# Start/goal, base/arm encoding, walls
 C_DIM = 2 * POINT_DIM + 11 * POINT_DIM
-LATENT_DIM = 3
+# C_DIM = 2 * POINT_DIM + POINT_DIM #+ 11 * POINT_DIM
+LATENT_DIM = 10
 
 
 

@@ -177,8 +177,8 @@ class CVAE(nn.Module):
         torch.save({'state_dict': self.decoder.state_dict()}, model_path)
 
     def forward(self, x, c=None):
-        if x.dim() > 2:
-            x = x.view(-1, 28*28)
+        # if x.dim() > 2:
+        #     x = x.view(-1, 28*28)
 
         batch_size = x.size(0)
 

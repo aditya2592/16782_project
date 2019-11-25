@@ -734,6 +734,7 @@ int main(int argc, char** argv) {
             std::vector<visualization_msgs::Marker> m_all;
 
             int idx = 0;
+            // Comment out visualization for speedup
             for( int pidx=0; pidx<plan.size(); pidx++ ){
                 auto& state = plan[pidx];
                 auto markers = cc.getCollisionRobotVisualization(state);

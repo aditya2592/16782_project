@@ -107,7 +107,84 @@ bool addGoalRegionsForTable(
     return true;
 }
 
+
+bool addGoalRegionsRightHalf(
+        StartGoalGenerator<RobotModel>& generator,
+        const smpl::urdf::URDFRobotModel* rm,
+        double map_x,
+        double map_y,
+        double table_height){
+
+    BoundedRegion goal_region;
+    std::vector<double> lo(6, 0), hi(6, 0);
+
+    // double table_x = table.primitive_poses[0].position.x;
+    // double table_y = table.primitive_poses[0].position.y;
+    // double table_size_x = table.primitives[0].dimensions[0];
+    // double table_size_y = table.primitives[0].dimensions[1];
+    // double table_height = table.primitives[0].dimensions[2];
+
+    // lo[0] = table_x - table_size_x/2;
+    // hi[0] = table_x + table_size_x/2;
+    // lo[1] = table_y - table_size_y/2;
+    // hi[1] = table_y + table_size_y/2;
+
+    lo[0] = map_x/3 + 0.5;
+    hi[0] = map_x - 0.5;
+    lo[1] = 0.5;
+    hi[1] = map_y - 0.5;
+
+    lo[2] = table_height + 0.05;
+    hi[2] = table_height + 0.18;
+
+    //roll
+    lo[3] = -3.14;
+    hi[3] = 3.14;
+
+    // Pitch
+    lo[4] = -3.14; //0
+    hi[4] = 3.14; //-0.1
+
+    //yaw all around
+    lo[5] = -3.14;
+    hi[5] = 3.14;
+
+    goal_region.lo = lo;
+    goal_region.hi = hi;
+    generator.addGoalRegion(goal_region);
+
+    return true;
+}
 // The Easy tests
+bool addStartRegionsLeftHalf(
+        StartGoalGenerator<RobotModel>& generator,
+        const smpl::urdf::URDFRobotModel* rm,
+        double map_x,
+        double map_y){
+
+    {
+        BoundedRegion start_region;
+        std::vector<double> lo(10, 0);
+        std::vector<double> hi(10, 0);
+        lo[0] = 0.5;
+        hi[0] = 2/3*map_x - 0.5;
+        lo[1] = 0.5;
+        hi[1] = map_y - 0.5;
+        lo[2] = -3.14;
+        hi[2] = 3.14;
+        for(int i=3; i<10; i++){
+            hi[i] = rm->vprops[i].max_position;
+            lo[i] = rm->vprops[i].min_position;
+            ROS_INFO("%f, %f", lo[i], hi[i]);
+        }
+        start_region.lo = lo;
+        start_region.hi = hi;
+        generator.addStartRegion(start_region);
+    }
+    return true;
+}
+
+
 bool addStartRegionsForRoom1(
         StartGoalGenerator<RobotModel>& generator,
         const smpl::urdf::URDFRobotModel* rm,
@@ -264,7 +341,7 @@ int main(int argc, char** argv){
 
     ////////////////////
     // Occupancy Grid //
-    ////////////////////
+    //////////////////
 
     ROS_INFO("Initialize Occupancy Grid");
 
@@ -341,13 +418,29 @@ int main(int argc, char** argv){
 
     scene_ptr->SetCollisionSpace(&cc);
 
-    std::vector<moveit_msgs::CollisionObject> doors;
-    auto map_config = getMultiRoomMapConfig(ph);
-    //auto objects = GetMultiRoomMapCollisionCubes(doors, grid_ptr->getReferenceFrame(), map_config);
-    auto objects = GetMultiRoomMapCollisionCubes( grid_ptr->getReferenceFrame(), map_config, doors );
-    for (auto& object : objects) {
-        scene_ptr->ProcessCollisionObjectMsg(object);
-    }
+    // if (false)
+    // {
+    //     std::vector<moveit_msgs::CollisionObject> doors;
+        auto map_config = getMultiRoomMapConfig(ph);
+    //     //auto objects = GetMultiRoomMapCollisionCubes(doors, grid_ptr->getReferenceFrame(), map_config);
+    //     auto objects = GetMultiRoomMapCollisionCubes( grid_ptr->getReferenceFrame(), map_config, doors );
+    //     for (auto& object : objects) {
+    //         scene_ptr->ProcessCollisionObjectMsg(object);
+    //     }
+    // }
+    // else
+    // {
+        std::string object_filename;
+        ph.param<std::string>("object_filename", object_filename, "");
+
+        // Read in collision objects from file and add to the scene...
+        if (!object_filename.empty()) {
+            auto objects = GetCollisionObjects(object_filename, planning_frame);
+            for (auto& object : objects) {
+                scene_ptr->ProcessCollisionObjectMsg(object);
+            }
+        }
+    // }
 
     ROS_INFO("Setting up robot model");
     auto fullbody_rm = SetupRobotModel<RobotModel>(robot_description, robot_config);
@@ -363,21 +456,23 @@ int main(int argc, char** argv){
     StartGoalGenerator<RobotModel> generator;
 
     //Get table objects.
-    std::vector<moveit_msgs::CollisionObject> tables;
-    for(auto& obj : objects){
-        ROS_ERROR("%s", obj.id.c_str());
-        if(obj.id.compare( 0, 5, "table" ) == 0){
-            tables.push_back(obj);
-        }
-    }
-    ROS_INFO("%d tables found in map.", tables.size());
+    // std::vector<moveit_msgs::CollisionObject> tables;
+    // for(auto& obj : objects){
+    //     ROS_ERROR("%s", obj.id.c_str());
+    //     if(obj.id.compare( 0, 5, "table" ) == 0){
+    //         tables.push_back(obj);
+    //     }
+    // }
+    // ROS_INFO("%d tables found in map.", tables.size());
     generator.init(&cc, fullbody_rm.get(), 1000);
     //addStartGoalRegionsForDoor(generator, rm.get(), doors);
-    addStartRegionsForRoom1(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
-    addStartRegionsForRoom3(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
-    addStartRegionsForRoom4(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
-    addStartRegionsForRoom5(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
-    addGoalRegionsForTable(generator, fullbody_rm.get(), tables);
+    // addStartRegionsForRoom1(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
+    // addStartRegionsForRoom3(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
+    // addStartRegionsForRoom4(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
+    // addStartRegionsForRoom5(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
+    addStartRegionsLeftHalf(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
+    // addGoalRegionsForTable(generator, fullbody_rm.get(), tables);
+    addGoalRegionsRightHalf(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max, map_config.table_height);
 
     const int N = 500;
     auto status = generator.generate(N);

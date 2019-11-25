@@ -32,7 +32,11 @@ class CVAEInterface():
     
 
 
-    def load_dataset(self, dataset_root, data_type="arm"):
+    def load_dataset(self, dataset_root, data_type="arm", mode="train"):
+        assert(data_type == "both" or data_type == "arm" or data_type == "base")
+        assert(mode == "train" or mode == "test")
+        # Should show different count and path for different modes
+        print("Loading {} dataset for mode : {}, path : {}".format(data_type, mode, dataset_root))
         self.data_type = data_type
 
         paths_dataset = PathsDataset(type="FULL_STATE")
@@ -64,8 +68,11 @@ class CVAEInterface():
             c_test_dataset.add_env_paths(all_condition_vars_tile.tolist())
             c_test_dataloader = DataLoader(c_test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
 
-            self.train_dataloader = dataloader
-            self.test_dataloader = c_test_dataloader 
+            # Depending on which dataset is being loaded, set the right variables
+            if mode == "train":
+                self.train_dataloader = dataloader
+            elif mode == "test":
+                self.test_dataloader = c_test_dataloader 
 
         else:
             arm_test_dataset = PathsDataset(type="CONDITION_ONLY")
@@ -90,9 +97,11 @@ class CVAEInterface():
             base_test_dataset.add_env_paths(base_condition_vars.tolist())
             base_test_dataloader = DataLoader(base_test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
 
-            self.train_dataloader = dataloader
-            self.arm_test_dataloader = arm_test_dataloader
-            self.base_test_dataloader = base_test_dataloader
+            if mode == "train":
+                self.train_dataloader = dataloader
+            elif mode == "test":
+                self.arm_test_dataloader = arm_test_dataloader
+                self.base_test_dataloader = base_test_dataloader
 
 
 
@@ -228,7 +237,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--run_id', dest='run_id', type=str, default=1)
     parser.add_argument('--num_epochs', dest='num_epochs', type=int, default=10)
-    parser.add_argument('--dataset_root', dest='dataset_root', type=str, required=True)
+    parser.add_argument('--train_dataset_root', dest='train_dataset_root', type=str, required=True)
+    parser.add_argument('--test_dataset_root', dest='test_dataset_root', type=str, required=True)
     parser.add_argument('--dataset_type', dest='dataset_type', type=str, help='choose arm/base', default='arm')
     parser.add_argument('--test_only', dest='test_only', action='store_true', help="Whether to use saved model and run test only")
     parser.add_argument('--decoder_path', dest='decoder_path', type=str, help='path to decoder model', default=None)
@@ -239,7 +249,8 @@ if __name__ == "__main__":
     args = parse_arguments()
     run_id = args.run_id
     num_epochs = args.num_epochs
-    dataset_root = args.dataset_root
+    train_dataset_root = args.train_dataset_root
+    test_dataset_root = args.test_dataset_root
     dataset_type = args.dataset_type
     test_only = args.test_only
     decoder_path = args.decoder_path
@@ -251,7 +262,8 @@ if __name__ == "__main__":
     cvae_interface = CVAEInterface(run_id=run_id,
                                     output_path=output_path)
 
-    cvae_interface.load_dataset(dataset_root, data_type=dataset_type)
+    cvae_interface.load_dataset(train_dataset_root, data_type=dataset_type, mode="train")
+    cvae_interface.load_dataset(test_dataset_root, data_type=dataset_type, mode="test")
     if test_only:
         if decoder_path is None or output_path is None:
             raise Exception("All inputs not provided for test mode")

@@ -27,6 +27,28 @@ def get_walls(complete_env_path):
         
     return walls
 
+def get_gaps(complete_env_path):
+    '''
+    '''
+    with open(complete_env_path, "r") as e:
+        line = e.readline()
+        gaps = []
+        count = 0
+        while line:
+            if "gap" in line:
+                gap = line.strip(" ").strip("\n").split(" ")[1:3]
+                gaps.extend(gap)
+                count = count + 1
+            
+            line = e.readline()
+        
+        # padding
+        # while count < 20:
+        #     walls.extend(["0"] * 6)
+        #     count = count + 1
+        
+    return gaps
+
 def get_start_goal(complete_sample_path):
     '''
     '''
@@ -50,10 +72,12 @@ def label_traj(complete_sample_path, complete_env_path, complete_directory_clean
         get arm and base labels from a single solution_path file
     '''
     # create conditioning variable
-    walls = get_walls(complete_env_path)
+    # walls = get_walls(complete_env_path)
+    gaps = get_gaps(complete_env_path)
     start, goal = get_start_goal(complete_sample_path)
     
-    conditions = " ".join(start + goal + walls)
+    # conditions = " ".join(start + goal + walls)
+    conditions = " ".join(start + goal + gaps)
     
     with open(data_path_base, "a") as b:
         with open(data_path_arm, "a") as a:
@@ -87,11 +111,11 @@ def label_traj(complete_sample_path, complete_env_path, complete_directory_clean
                         if base_moved:
                             b.write("{} {} {}\n".format(joint_angles[0], joint_angles[1], conditions))
                             # One hot encoding for training single cvae
-                            both_conditions = " ".join(start + goal + ["0", "1"] + walls)
+                            both_conditions = " ".join(start + goal + ["0", "1"] + gaps)
                         
                         if arm_moved:
                             a.write("{} {} {}\n".format(joint_angles[0], joint_angles[1], conditions))
-                            both_conditions = " ".join(start + goal + ["1", "0"] + walls)
+                            both_conditions = " ".join(start + goal + ["1", "0"] + gaps)
                             
                         c.write("{} {} {}\n".format(joint_angles[0], joint_angles[1], both_conditions))
                         line = f.readline()
@@ -106,6 +130,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--test', dest='test', action='store_true', help="use test data")
     parser.add_argument('--env', dest='env', type=str, help="create train data only for given env", default=None)
+    parser.add_argument('--env_path_root', required=True, dest='env_path_root', type=str, help="path where all .env files are present")
     parser.set_defaults(test=False)
     return parser.parse_args()
 
@@ -114,7 +139,7 @@ if __name__ == "__main__":
         entry point
     '''
     args = parse_arguments()
-    
+    env_path_root = args.env_path_root
     if args.test:
         directory = os.path.join(os.environ["PLANNING_PROJECT_DATA"], "test")
         directory_clean = os.path.join(os.environ["PLANNING_PROJECT_DATA"], "test_clean")
@@ -151,7 +176,8 @@ if __name__ == "__main__":
                 for sample_path in filter(lambda f: f.startswith('solution_path'), sample_paths):
                     complete_sample_path = os.path.join(directory, env_path, bulk_path, paths_dir, sample_path)
                     print("     Found txt path : {}".format(complete_sample_path))
-                    complete_env_path = os.path.join(directory, env_path, "proj_env.env")
+                    # .Env file path
+                    complete_env_path = os.path.join(env_path_root, "{}.txt".format(env_path))
                     complete_directory_clean = os.path.join(directory_clean, env_path)
                     
                     data_path_base = os.path.join(directory_clean, env_path, "data_base.txt")

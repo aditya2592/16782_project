@@ -66,6 +66,19 @@ cp ~/.ros/start_states.txt experiments/
 5. Run planner and verify in RVIZ :
 ```roslaunch walker_planner mrmhaplanner.launch```
 
+Generating Traj (Python)
+------------------------
+1. Launch the URDF package in sepearate shell and keep it running :
+```
+roslaunch wheeled_walker planning_context_walker.launch
+```
+2. Go to cvae folder
+3. Run the following python script giving a list of map filname index to run the planner for :
+```
+python generate_map_paths.py --env_path_root $PWD/../env --output_path $PWD/test_data --env_list 2 3 4 5 6 7 8 --max_paths 2000
+```
+Note : The above script makes a ros_temp directory while generating stuff which is basically ROS_HOME. The final paths are copied to the path specified in --output_path 
+
 Creating Dataset
 ----------------
 1. Go to cvae folder
@@ -93,7 +106,7 @@ Training CVAE
 1. Go to cvae folder.
 2. Run following command to run for training base cvae. Tensorboard outputs are stored in 'experiments/cvae/{run_id}'
 ```
-python run.py --dataset_root ../data/train_clean --num_epochs 50 --dataset_type base --run_od base_cvae
+python run.py --train_dataset_root ../data/train_clean --test_dataset_root ../data/test_clean --num_epochs 250 --dataset_type arm --run_id arm_cvae
 ```
 
 Testing CVAE

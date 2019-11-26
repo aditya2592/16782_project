@@ -31,6 +31,26 @@ class CVAEInterface():
             os.mkdir(self.output_path)
     
 
+    def visualize_train_data(self, num_conditions=1):
+        # Pick a random condition
+        # Find all states for that condition
+        # Plot them
+        print("Plotting input data for {} random conditions".format(num_conditions))
+        all_input_paths = np.array(self.train_paths_dataset.paths)[:,1:]
+        # print(all_input_paths[0,:])
+        for c_i in range(num_conditions):
+            condition = all_input_paths[np.random.randint(0, all_input_paths.shape[0]), 2:]
+            # print(condition)
+            # condition_samples = np.argwhere(all_input_paths[:,2:] == condition)
+            # indices = np.where(all_input_paths[:,2:] == condition)
+            indices = np.where(np.isin(all_input_paths[:,2:], condition).all(axis=1))[0]
+            # print(indices)
+            x = all_input_paths[indices, :2]
+            fig = self.plot(x, condition, walls=True)
+            self.cvae.tboard.add_figure('train_data/condition_{}'.format(c_i), fig, 0)
+            # print(all_input_paths[indices,:])
+        self.cvae.tboard.flush()
+
 
     def load_dataset(self, dataset_root, data_type="arm", mode="train"):
         assert(data_type == "both" or data_type == "arm" or data_type == "base")
@@ -71,9 +91,9 @@ class CVAEInterface():
             # Depending on which dataset is being loaded, set the right variables
             if mode == "train":
                 self.train_dataloader = dataloader
+                self.train_paths_dataset = paths_dataset
             elif mode == "test":
                 self.test_dataloader = c_test_dataloader 
-
         else:
             arm_test_dataset = PathsDataset(type="CONDITION_ONLY")
             base_test_dataset = PathsDataset(type="CONDITION_ONLY")
@@ -119,7 +139,7 @@ class CVAEInterface():
             wall_locs = c[4:]
             i = 0
             while i < wall_locs.shape[0]:
-                plt.scatter(wall_locs[i], wall_locs[i+1], color="yellow", s=70, alpha=0.6)
+                plt.scatter(wall_locs[i], wall_locs[i+1], color="black", s=70, alpha=0.6)
                 i = i + 2
 
         plt.xlim(0, X_MAX)
@@ -241,7 +261,7 @@ def parse_arguments():
     parser.add_argument('--test_dataset_root', dest='test_dataset_root', type=str, required=True)
     parser.add_argument('--dataset_type', dest='dataset_type', type=str, help='choose arm/base', default='arm')
     parser.add_argument('--test_only', dest='test_only', action='store_true', help="Whether to use saved model and run test only")
-    parser.add_argument('--decoder_path', dest='decoder_path', type=str, help='path to decoder model', default=None)
+    parser.add_argument('--decoder_path', dest='decoder_path', type=str, help='path to decoder model for testing', default=None)
     parser.add_argument('--output_path', dest='output_path', type=str, help='path to store output plots and files in test mode', default=None)
     return parser.parse_args()
 
@@ -263,6 +283,7 @@ if __name__ == "__main__":
                                     output_path=output_path)
 
     cvae_interface.load_dataset(train_dataset_root, data_type=dataset_type, mode="train")
+    cvae_interface.visualize_train_data(num_conditions=50)
     cvae_interface.load_dataset(test_dataset_root, data_type=dataset_type, mode="test")
     if test_only:
         if decoder_path is None or output_path is None:

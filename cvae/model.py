@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+import shutil
 
 from model_constants import *
 
@@ -139,6 +140,10 @@ class CVAE(nn.Module):
             self.tf_path = '{}/{}/{}/'.format(self.experiment_path_prefix, self.run_id, self.tf_sub_path)
             if not os.path.exists(self.tf_path):
                 os.makedirs(self.tf_path)
+            else:
+                shutil.rmtree(self.tf_path)
+                os.makedirs(self.tf_path)
+
             self.tboard = SummaryWriter(self.tf_path)
 
     def train(self):

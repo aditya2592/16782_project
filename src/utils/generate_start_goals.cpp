@@ -483,5 +483,8 @@ int main(int argc, char** argv){
     generator.writeToFile(
             "x y theta right_j1 right_j2 right_j3 right_j4 right_j5 right_j6 right_j7\n",
             "start_states.txt", "goal_states.txt", "goal_poses.txt");
+
+    return 0;
+
 }
 

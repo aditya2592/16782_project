@@ -82,20 +82,20 @@ Note : The above script makes a ros_temp directory while generating stuff which 
 Creating Dataset
 ----------------
 1. Go to cvae folder
-2. Run the following to generate clean dataset for env '1' only located in 'data/train'. Output is stored in 'data/train_clean'
+2. Run the following to generate clean dataset for env '1' only located in 'data/train'. Output is stored in 'data/train_clean'. env_path_root specifies the location where environment .env files are present. These are used for reading gap locations.
 ```
 source activate.sh
-python create_data.py --env 1
+python create_data.py --env 1 --env_path_root ../env
 ```
 3. Run following to generate clean dataset for all env located in 'data/train'. Output is stored in 'data/train_clean'
 ```
 source activate.sh
-python create_data.py
+python create_data.py --env_path_root ../env
 ```
 4. Run following to generate clean test dataset for all env located in 'data/test'. Output is stored in 'data/test_clean'
 ```
 source activate.sh
-python create_data.py --test
+python create_data.py --test --env_path_root ../env
 ```
 5. Data will be dumped in following format in two .txt files - 'data_base.txt' and 'data_arm.txt':
 ```

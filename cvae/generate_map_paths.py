@@ -73,8 +73,8 @@ class MRMHAInterface():
             }
         self.set_ros_param_from_dict(params)
         self.launch_ros_node(self.GEN_PATHS_LAUNCH_FILE)
-        shutil.copy(start_states_path, env_output_path)
-        shutil.copy(goal_states_path, env_output_path)
+        shutil.move(start_states_path, env_output_path)
+        shutil.move(goal_states_path, env_output_path)
         shutil.move(paths_path, env_output_path)
         
     

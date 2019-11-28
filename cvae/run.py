@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
 from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.collections import PatchCollection
+from matplotlib.patches import Rectangle
 import os
 import csv
 from random import randint, random
@@ -19,11 +21,12 @@ from paths_dataset import PathsDataset
 
 
 class CVAEInterface():
-    def __init__(self, run_id=1, output_path=""):
+    def __init__(self, run_id=1, output_path="", env_path_root=""):
         super().__init__()
         self.cvae = CVAE(run_id=run_id)
         self.device = torch.device('cuda' if CUDA_AVAILABLE else 'cpu')
         self.output_path = output_path
+        self.env_path_root = env_path_root
 
         if self.output_path is not None:
             if os.path.exists(self.output_path):
@@ -31,25 +34,7 @@ class CVAEInterface():
             os.mkdir(self.output_path)
     
 
-    def visualize_train_data(self, num_conditions=1):
-        # Pick a random condition
-        # Find all states for that condition
-        # Plot them
-        print("Plotting input data for {} random conditions".format(num_conditions))
-        all_input_paths = np.array(self.train_paths_dataset.paths)[:,1:]
-        # print(all_input_paths[0,:])
-        for c_i in range(num_conditions):
-            condition = all_input_paths[np.random.randint(0, all_input_paths.shape[0]), 2:]
-            # print(condition)
-            # condition_samples = np.argwhere(all_input_paths[:,2:] == condition)
-            # indices = np.where(all_input_paths[:,2:] == condition)
-            indices = np.where(np.isin(all_input_paths[:,2:], condition).all(axis=1))[0]
-            # print(indices)
-            x = all_input_paths[indices, :2]
-            fig = self.plot(x, condition, walls=True)
-            self.cvae.tboard.add_figure('train_data/condition_{}'.format(c_i), fig, 0)
-            # print(all_input_paths[indices,:])
-        self.cvae.tboard.flush()
+
 
 
     def load_dataset(self, dataset_root, data_type="arm", mode="train"):
@@ -67,7 +52,7 @@ class CVAEInterface():
         for env_dir_index in filter(lambda f: f[0].isdigit(), env_dir_paths):
             env_paths_file = os.path.join(dataset_root, env_dir_index, "data_{}.txt".format(data_type))
             env_paths = np.loadtxt(env_paths_file)
-            all_condition_vars += env_paths[:,X_DIM:X_DIM+C_DIM].tolist()
+            condition_vars = env_paths[:,X_DIM:X_DIM+C_DIM]
             # print(env_paths.shape)
             # Take only required elements
             env_paths = env_paths[:, :X_DIM + C_DIM]
@@ -77,6 +62,11 @@ class CVAEInterface():
             env_index.fill(env_dir_index)
             data = np.hstack((env_index, env_paths))
             paths_dataset.add_env_paths(data.tolist())
+
+            env_index = np.empty((condition_vars.shape[0], 1))
+            env_index.fill(env_dir_index)
+            data = np.hstack((env_index, condition_vars))
+            all_condition_vars += data.tolist()
             print("Added {} states from {} environment".format(env_paths.shape[0], env_dir_index))
 
         dataloader = DataLoader(paths_dataset, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
@@ -84,6 +74,7 @@ class CVAEInterface():
         if data_type != "both":
             self.all_condition_vars = np.unique(all_condition_vars, axis=0)
             print("Unique test conditions count : {}".format(self.all_condition_vars.shape[0]))
+            # Tile condition variables to predict given number of samples for x
             all_condition_vars_tile = np.repeat(self.all_condition_vars, TEST_SAMPLES, 0)
             c_test_dataset.add_env_paths(all_condition_vars_tile.tolist())
             c_test_dataloader = DataLoader(c_test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
@@ -123,25 +114,73 @@ class CVAEInterface():
                 self.arm_test_dataloader = arm_test_dataloader
                 self.base_test_dataloader = base_test_dataloader
 
+    def visualize_train_data(self, num_conditions=1):
+        # Pick a random condition
+        # Find all states for that condition
+        # Plot them
+        print("Plotting input data for {} random conditions".format(num_conditions))
+        all_input_paths = np.array(self.train_paths_dataset.paths)[:,1:]
+        env_ids = np.array(self.train_paths_dataset.paths)[:,:1]
+        # print(all_input_paths[0,:])
+        for c_i in range(num_conditions):
+            rand_index = np.random.randint(0, all_input_paths.shape[0])
+            condition = all_input_paths[rand_index, 2:]
+            env_id = env_ids[rand_index, 0]
+            # print(condition)
+            # condition_samples = np.argwhere(all_input_paths[:,2:] == condition)
+            # indices = np.where(all_input_paths[:,2:] == condition)
+            # Find all samples corresponding to this condition
+            indices = np.where(np.isin(all_input_paths[:,2:], condition).all(axis=1))[0]
+            # print(indices)
+            x = all_input_paths[indices, :2]
+            fig = self.plot(x, condition, env_id=env_id)
+            self.cvae.tboard.add_figure('train_data/condition_{}'.format(c_i), fig, 0)
+            # print(all_input_paths[indices,:])
+        self.cvae.tboard.flush()
 
+    def visualize_map(self, env_id):
+        path = "{}/{}.txt".format(self.env_path_root, int(env_id))
+        plt.title('Environment - {}'.format(env_id))
+        with open(path, "r") as f:
+            line = f.readline()
+            while line:
+                line = line.split(" ")
+                # print(line)
+                if "wall" in line[0] or "table" in line[0]:
+                    x = float(line[1])
+                    y = float(line[2])
+                    l = float(line[4])
+                    b = float(line[5])
+                    rect = Rectangle((x-l/2, y-b/2), l, b)
+                    plt.gca().add_patch(rect)
+                    
+                line = f.readline()
+        plt.draw()
+        
 
-    def plot(self, x, c, walls=False, suffix=0, write_file=False):
+    def plot(self, x, c, env_id=None, suffix=0, write_file=False):
+        '''
+            Plot samples and environment - from train input or predicted output
+        '''
         # print(c)
         start = c[0:2]
         goal = c[2:4]
         # For given conditional, plot the samples
         fig1 = plt.figure(figsize=(10, 6), dpi=80)
-        ax1 = fig1.add_subplot(111, aspect='equal')
+        # ax1 = fig1.add_subplot(111, aspect='equal')
         plt.scatter(x[:, 0], x[:, 1], color="green", s=70, alpha=0.1)
         plt.scatter(start[0], start[1], color="blue", s=70, alpha=0.6)
         plt.scatter(goal[0], goal[1], color="red", s=70, alpha=0.6)
-        if walls:
-            wall_locs = c[4:]
-            i = 0
-            while i < wall_locs.shape[0]:
-                plt.scatter(wall_locs[i], wall_locs[i+1], color="green", s=70, alpha=0.6)
-                i = i + 2
+        if env_id is not None:
+            self.visualize_map(env_id)
+            # wall_locs = c[4:]
+            # i = 0
+            # while i < wall_locs.shape[0]:
+            #     plt.scatter(wall_locs[i], wall_locs[i+1], color="green", s=70, alpha=0.6)
+            #     i = i + 2
 
+        plt.xlabel('x')
+        plt.ylabel('y')
         plt.xlim(0, X_MAX)
         plt.ylim(0, Y_MAX)
         if write_file:
@@ -167,7 +206,7 @@ class CVAEInterface():
         self.cvae.eval()
         for iteration, batch in enumerate(dataloader):
             # print(batch)
-            c_test_data = batch.float().to(self.device)
+            c_test_data = batch['condition'].float().to(self.device)
             # print(c_test_data[0,:])
             x_test = self.cvae.batch_inference(c=c_test_data)
             x_test_predicted += x_test.detach().cpu().numpy().tolist()
@@ -182,8 +221,9 @@ class CVAEInterface():
         for c_i in range(self.all_condition_vars.shape[0]):
             x_test = x_test_predicted[c_i * TEST_SAMPLES : (c_i + 1) * TEST_SAMPLES]
             # Fine because c_test is used only for plotting, we dont need arm/base label here
-            c_test = self.all_condition_vars[c_i, :]
-            fig = self.plot(x_test, c_test, walls=True, suffix=c_i, write_file=write_file)
+            c_test = self.all_condition_vars[c_i, 1:]
+            env_id = self.all_condition_vars[c_i, 0]
+            fig = self.plot(x_test, c_test, env_id=env_id, suffix=c_i, write_file=write_file)
             self.cvae.tboard.add_figure('test_epoch_{}/condition_{}_{}'.format(epoch, c_i, suffix), fig, 0)
             if c_i % LOG_INTERVAL == 0:
                 print("Plotting condition : {}".format(c_i))
@@ -263,6 +303,8 @@ def parse_arguments():
     parser.add_argument('--test_only', dest='test_only', action='store_true', help="Whether to use saved model and run test only")
     parser.add_argument('--decoder_path', dest='decoder_path', type=str, help='path to decoder model for testing', default=None)
     parser.add_argument('--output_path', dest='output_path', type=str, help='path to store output plots and files in test mode', default=None)
+    parser.add_argument('--env_path_root', required=True, dest='env_path_root', type=str, help="path where all .env files are present")
+
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -275,12 +317,13 @@ if __name__ == "__main__":
     test_only = args.test_only
     decoder_path = args.decoder_path
     output_path = args.output_path
-
+    env_path_root = args.env_path_root
         
 
     print("CUDA_AVAILABLE : {}".format(CUDA_AVAILABLE))
     cvae_interface = CVAEInterface(run_id=run_id,
-                                    output_path=output_path)
+                                    output_path=output_path,
+                                    env_path_root=env_path_root)
 
     cvae_interface.load_dataset(train_dataset_root, data_type=dataset_type, mode="train")
     cvae_interface.visualize_train_data(num_conditions=50)

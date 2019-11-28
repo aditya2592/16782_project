@@ -36,7 +36,10 @@ class PathsDataset(Dataset):
                 'condition': np.array(self.paths[idx][3:]),
             }
         elif self.type == "CONDITION_ONLY":
-            return np.array(self.paths[idx])
+            return {
+                'env': self.paths[idx][0],
+                'condition': np.array(self.paths[idx][1:]),
+            }
 
     def get_batch(self, batch_size):
         # Randomly sample batch_size examples

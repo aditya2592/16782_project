@@ -33,7 +33,7 @@ X_DIM = POINT_DIM
 # Start/goal, base/arm encoding, walls
 C_DIM = 2 * POINT_DIM + 5 * POINT_DIM
 # C_DIM = 2 * POINT_DIM + POINT_DIM #+ 11 * POINT_DIM
-LATENT_DIM = 10
+LATENT_DIM = 3
 
 
 

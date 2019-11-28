@@ -215,6 +215,6 @@ class CVAE(nn.Module):
         # BCE = torch.nn.functional.binary_cross_entropy(
         #     recon_x, x, reduction='sum')
         MSE = torch.nn.functional.mse_loss(recon_x, x, reduction='sum')
-        KLD = -0.5 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
+        KLD = -0.1 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
 
         return (MSE + KLD) / x.size(0)

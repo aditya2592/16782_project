@@ -433,16 +433,25 @@ int main(int argc, char** argv){
     // }
     // else
     // {
-        std::string object_filename;
-        ph.param<std::string>("object_filename", object_filename, "");
+    std::vector<moveit_msgs::CollisionObject> tables;
 
-        // Read in collision objects from file and add to the scene...
-        if (!object_filename.empty()) {
-            auto objects = GetCollisionObjects(object_filename, planning_frame);
-            for (auto& object : objects) {
-                scene_ptr->ProcessCollisionObjectMsg(object);
+    std::string object_filename;
+    ph.param<std::string>("object_filename", object_filename, "");
+
+    // Read in collision objects from file and add to the scene...
+    if (!object_filename.empty()) {
+        auto objects = GetCollisionObjects(object_filename, planning_frame);
+        for (auto& object : objects) {
+            scene_ptr->ProcessCollisionObjectMsg(object);
+        }
+        //Get table objects.
+        for(auto& obj : objects){
+            ROS_ERROR("%s", obj.id.c_str());
+            if(obj.id.compare( 0, 5, "table" ) == 0){
+                tables.push_back(obj);
             }
         }
+    }
     // }
 
     ROS_INFO("Setting up robot model");
@@ -458,15 +467,7 @@ int main(int argc, char** argv){
 
     StartGoalGenerator<RobotModel> generator;
 
-    //Get table objects.
-    // std::vector<moveit_msgs::CollisionObject> tables;
-    // for(auto& obj : objects){
-    //     ROS_ERROR("%s", obj.id.c_str());
-    //     if(obj.id.compare( 0, 5, "table" ) == 0){
-    //         tables.push_back(obj);
-    //     }
-    // }
-    // ROS_INFO("%d tables found in map.", tables.size());
+
     generator.init(&cc, fullbody_rm.get(), 1000);
     //addStartGoalRegionsForDoor(generator, rm.get(), doors);
     // addStartRegionsForRoom1(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
@@ -474,8 +475,13 @@ int main(int argc, char** argv){
     // addStartRegionsForRoom4(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
     // addStartRegionsForRoom5(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
     addStartRegionsLeftHalf(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max);
-    // addGoalRegionsForTable(generator, fullbody_rm.get(), tables);
-    addGoalRegionsRightHalf(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max, map_config.table_height);
+
+    
+    ROS_INFO("%d tables found in map.", tables.size());
+    if (tables.size() > 0)
+        addGoalRegionsForTable(generator, fullbody_rm.get(), tables);
+    else
+        addGoalRegionsRightHalf(generator, fullbody_rm.get(), map_config.x_max, map_config.y_max, map_config.table_height);
 
     const int N = 500;
     auto status = generator.generate(N);

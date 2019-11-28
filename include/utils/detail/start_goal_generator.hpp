@@ -20,7 +20,10 @@ bool StartGoalGenerator<RM>::init( smpl::collision::CollisionSpace* _cc,
         unsigned int _seed ){
     m_cc = _cc;
     m_rm = _rm;
-    srand(_seed);
+    // srand(_seed);
+    struct timeval t1;
+    gettimeofday(&t1, NULL);
+    srand(t1.tv_usec * t1.tv_sec);
     return true;
 }
 

@@ -129,8 +129,9 @@ bool addGoalRegionsRightHalf(
     // lo[1] = table_y - table_size_y/2;
     // hi[1] = table_y + table_size_y/2;
 
-    lo[0] = map_x/3 + 0.5;
+    lo[0] = 2*map_x/3 + 0.5;
     hi[0] = map_x - 0.5;
+    ROS_INFO("addGoalRegionsRightHalf %f, %f\n", lo[0], hi[0]);
     lo[1] = 0.5;
     hi[1] = map_y - 0.5;
 
@@ -166,8 +167,10 @@ bool addStartRegionsLeftHalf(
         BoundedRegion start_region;
         std::vector<double> lo(10, 0);
         std::vector<double> hi(10, 0);
+
         lo[0] = 0.5;
-        hi[0] = 2/3*map_x - 0.5;
+        hi[0] = 2*map_x/3 - 0.5;
+        ROS_INFO("addStartRegionsLeftHalf %f, %f\n", lo[0], hi[0]);
         lo[1] = 0.5;
         hi[1] = map_y - 0.5;
         lo[2] = -3.14;

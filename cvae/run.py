@@ -139,7 +139,7 @@ class CVAEInterface():
             wall_locs = c[4:]
             i = 0
             while i < wall_locs.shape[0]:
-                plt.scatter(wall_locs[i], wall_locs[i+1], color="black", s=70, alpha=0.6)
+                plt.scatter(wall_locs[i], wall_locs[i+1], color="green", s=70, alpha=0.6)
                 i = i + 2
 
         plt.xlim(0, X_MAX)
@@ -183,7 +183,7 @@ class CVAEInterface():
             x_test = x_test_predicted[c_i * TEST_SAMPLES : (c_i + 1) * TEST_SAMPLES]
             # Fine because c_test is used only for plotting, we dont need arm/base label here
             c_test = self.all_condition_vars[c_i, :]
-            fig = self.plot(x_test, c_test, suffix=c_i, write_file=write_file)
+            fig = self.plot(x_test, c_test, walls=True, suffix=c_i, write_file=write_file)
             self.cvae.tboard.add_figure('test_epoch_{}/condition_{}_{}'.format(epoch, c_i, suffix), fig, 0)
             if c_i % LOG_INTERVAL == 0:
                 print("Plotting condition : {}".format(c_i))

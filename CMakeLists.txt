@@ -64,6 +64,11 @@ generate_messages(
     std_msgs
     )
 
+add_service_files(
+   FILES
+   Prediction.srv
+ )
+
 catkin_package(
 INCLUDE_DIRS include
 #  LIBRARIES walker

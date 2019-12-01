@@ -209,7 +209,7 @@ class CVAEInterface():
         x_test = x_test.detach().cpu().numpy()
 
         if visualize:
-            self.plot(x_test, c_test, env_id=env_id, show=False)
+            self.plot(x_test, c_test, env_id=env_id, show=False, write_file=True, suffix=0)
         return x_test
 
     def test(self, epoch, dataloader, write_file=False, suffix=""):

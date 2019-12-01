@@ -1,33 +1,23 @@
-//#include <tf2/LinearMath/Quaternion.h>
 #include <sstream>
 #include <memory>
 #include <fstream>
-#include <stdlib.h>
 #include <time.h>
 
 #include <ros/ros.h>
 #include <trac_ik_robot_model/trac_ik_robot_model.h>
 #include <smpl/graph/manip_lattice_action_space.h>
-#include <smpl/graph/manip_lattice_multi_rep.h>
 #include <smpl/graph/motion_primitive.h>
-#include <smpl/heuristic/bfs_heuristic.h>
-#include <smpl/heuristic/bfs_fullbody_heuristic.h>
-#include <smpl/heuristic/euclid_dist_heuristic.h>
-#include <smpl/heuristic/euclid_diffdrive_heuristic.h>
-#include <smpl/heuristic/arm_retract_heuristic.h>
-#include <smpl/heuristic/base_rot_bfs_heuristic.h>
-//#include <sbpl/planners/mrmhaplanner.h>
-#include <smpl/search/smhastar.h>
 #include <sbpl/planners/types.h>
-#include <panini/algo.h>
 
 #include "heuristics/walker_heuristics.h"
-#include "planners/mrmhaplanner.h"
 #include "planners/mhaplanner.h"
 #include "motion_planner.h"
 #include "motion_planner_ros.h"
 #include "scheduling_policies.h"
 #include "utils/utils.h"
+#include "heuristics/walker_heuristics.h"
+
+#define NUM_ACTION_SPACES 1
 
 class ReadExperimentsFromFile {
     public:
@@ -113,9 +103,9 @@ smpl::GoalConstraint stringToGoalConstraint(std::string _pose_str){
     goal.xyz_tolerance[0] = 0.05;
     goal.xyz_tolerance[1] = 0.05;
     goal.xyz_tolerance[2] = 0.05;
-    goal.rpy_tolerance[0] = 3.14;
-    goal.rpy_tolerance[1] = 3.14;
-    goal.rpy_tolerance[2] = 3.14;
+    goal.rpy_tolerance[0] = 0.70;//0.39;
+    goal.rpy_tolerance[1] = 0.70;//0.39;
+    goal.rpy_tolerance[2] = 0.70;//0.39;
 
     return goal;
 }
@@ -184,8 +174,8 @@ void writePath(std::string _file_name, std::string _header, std::vector<smpl::Ro
 }
 
 int main(int argc, char** argv) {
-    SMPL_INFO("MRMHAPlanner");
-    ros::init(argc, argv, "mrmhaplanner");
+    SMPL_INFO("MHAPlanner");
+    ros::init(argc, argv, "mhaplanner");
     ros::NodeHandle nh;
     ros::NodeHandle ph("~");
     ros::Rate loop_rate(10);
@@ -371,12 +361,14 @@ int main(int argc, char** argv) {
     std::array< std::shared_ptr<smpl::RobotHeuristic>, NUM_QUEUES > robot_heurs;
     std::vector< std::shared_ptr<smpl::RobotHeuristic> > bfs_heurs;
 
+    // Set all to 0.
     std::array<int, NUM_QUEUES> rep_ids;
-
     if(!constructHeuristics( robot_heurs, rep_ids, bfs_heurs, space.get(), grid_ptr.get(), rm.get(), planning_config )){
         ROS_ERROR("Could not construct heuristics.");
         return 0;
     }
+    for( int i = 0; i < rep_ids.size(); i++)
+        rep_ids[i] = (int)Fullbody;
 
     ROS_ERROR("Number of heuristics: %d", robot_heurs.size());
     assert(robot_heurs.size() == NUM_QUEUES);
@@ -396,19 +388,11 @@ int main(int argc, char** argv) {
 
     // if aij = 1 :  closed in rep i => closed in rep j
     std::array< std::array<int, NUM_ACTION_SPACES>, NUM_ACTION_SPACES >
-        rep_dependency_matrix = {{ {{1, 1, 1}},
-                                  {{0, 1, 0}},
-                                  {{0, 1, 0}} }};
-    //std::array< std::array<int, NUM_ACTION_SPACES>, NUM_ACTION_SPACES >
-        //rep_dependency_matrix = {{ {{1}} }};
+        rep_dependency_matrix = {{ {{1}} }};
 
-
-    //auto uniformly_random_policy = std::make_unique<UniformlyRandomPolicy>(inad_heurs.size(), 100);
     auto round_robin_policy = std::make_unique<RoundRobinPolicy>(inad_heurs.size());
 
-    using Planner = MRMHAPlanner<NUM_QUEUES, NUM_ACTION_SPACES, RoundRobinPolicy>;
-    //auto search_ptr = std::make_unique<Planner>(
-    //        space.get(), heurs_array, rep_ids, rep_dependency_matrix, uniformly_random_policy.get() );
+    using Planner = MHAPlanner<NUM_QUEUES, RoundRobinPolicy>;
     auto search_ptr = std::make_unique<Planner>(
             space.get(), heurs_array, rep_ids, rep_dependency_matrix, round_robin_policy.get() );
 
@@ -417,8 +401,7 @@ int main(int argc, char** argv) {
     const double eps_mha = planning_config.eps_mha;
     MPlanner::PlannerParams planner_params = { max_planning_time, eps, eps_mha, false };
 
-    //using MotionPlanner = MPlanner::MotionPlanner<Planner, smpl::ManipLatticeMultiRep>;
-    using MotionPlanner = MPlanner::MotionPlanner<Planner, smpl::ManipLattice>;
+    using MotionPlanner = MPlanner::MotionPlanner<Planner, smpl::ManipLatticeMultiRep>;
     auto mplanner = std::make_unique<MotionPlanner>();
     mplanner->init(search_ptr.get(), space.get(), heurs, planner_params);
 
@@ -463,7 +446,6 @@ int main(int argc, char** argv) {
             std::vector<visualization_msgs::Marker> m_all;
 
             int idx = 0;
-            // Comment out visualization for speedup
             for( int pidx=0; pidx<plan.size(); pidx++ ){
                 auto& state = plan[pidx];
                 auto markers = cc.getCollisionRobotVisualization(state);

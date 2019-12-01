@@ -19,276 +19,12 @@
 #include <smpl/search/smhastar.h>
 #include <sbpl/planners/types.h>
 
-#include "planners/mrmhaplanner.h"
-#include "planners/mhaplanner.h"
-#include "motion_planner.h"
+#include "heuristics/walker_heuristics.h"
+#include "planners/mrmhaplanner_cobandits.h"
+#include "context_features.h"
 #include "motion_planner_ros.h"
 #include "scheduling_policies.h"
 #include "utils/utils.h"
-
-#define NUM_QUEUES 10
-#define NUM_ACTION_SPACES 3
-
-enum ActionSpace {
-    Fullbody = 0,
-    Arm,
-    Base
-};
-
-bool constructHeuristics(
-        std::vector<std::unique_ptr<smpl::RobotHeuristic>>& heurs,
-        smpl::ManipLattice* pspace,
-        smpl::OccupancyGrid* grid,
-        smpl::KDLRobotModel* rm,
-        PlannerConfig& params ){
-
-    SMPL_INFO("Initialize Heuristics");
-    const int DefaultCostMultiplier = 1000;
-
-    struct AnchorHeuristic : public BfsHeuristic {
-        int GetGoalHeuristic(int state_id) override {
-            return std::max(bfs_3d_base->GetGoalHeuristic(state_id), bfs_3d->GetGoalHeuristic(state_id));
-        }
-
-        double getMetricGoalDistance(double x, double y, double z) override {
-            return bfs_3d->getMetricGoalDistance(x, y, z);
-        }
-
-        double getMetricStartDistance(double x, double y, double z) override {
-            return bfs_3d->getMetricStartDistance(x, y, z);
-        }
-    };
-
-    struct EndEffHeuristic : public BfsHeuristic {
-        bool init(std::shared_ptr<smpl::Bfs3DBaseHeuristic> _bfs_3d_base,
-                std::shared_ptr<smpl::Bfs3DHeuristic> _bfs_3d){
-            if(!BfsHeuristic::init(_bfs_3d_base, _bfs_3d))
-                return false;
-            pose_ext = bfs_3d->planningSpace()->getExtension<smpl::PoseProjectionExtension>();
-            return true;
-        }
-
-        int GetGoalHeuristic(int state_id){
-            if (state_id == bfs_3d->planningSpace()->getGoalStateID()) {
-                return 0;
-            }
-            if(pose_ext == nullptr)
-                return 0;
-            smpl::Affine3 p;
-            if(!pose_ext->projectToPose(state_id, p))
-                return 0;
-
-            auto goal_pose = bfs_3d->planningSpace()->goal().pose;
-
-            smpl::Quaternion qa(p.rotation());
-            smpl::Quaternion qb(goal_pose.rotation());
-            double dot = qa.dot(qb);
-            if (dot < 0.0) {
-                qb = smpl::Quaternion(-qb.w(), -qb.x(), -qb.y(), -qb.z());
-                dot = qa.dot(qb);
-            }
-            int rot_dist = DefaultCostMultiplier*smpl::angles::normalize_angle(2.0 * std::acos(dot));
-
-            int base_dist = bfs_3d_base->GetGoalHeuristic(state_id);
-            int arm_dist = bfs_3d->GetGoalHeuristic(state_id);
-
-            int heuristic = base_coeff*base_dist + arm_coeff*arm_dist + rot_coeff*rot_dist;
-            return heuristic;
-        }
-
-        double base_coeff=0.2;
-        double arm_coeff=10;
-        double rot_coeff=10;
-        smpl::PoseProjectionExtension* pose_ext = nullptr;
-    };
-
-    struct RetractArmHeuristic : public BfsHeuristic {
-        bool init(std::shared_ptr<smpl::Bfs3DBaseHeuristic> _bfs_3d_base,
-                std::shared_ptr<smpl::Bfs3DHeuristic> _bfs_3d){
-            if(!BfsHeuristic::init(_bfs_3d_base, _bfs_3d))
-                return false;
-            return true;
-        }
-
-        int GetGoalHeuristic(int state_id){
-            if(state_id == 0)
-                return 0;
-
-            smpl::Vector3 p;
-            if(!bfs_3d->m_pp->projectToPoint(state_id, p)){
-                ROS_ERROR("RetractArmHeuristic Could not project");
-                return 0;
-            }
-            auto retracted_robot_state = bfs_3d->planningSpace()->getExtension<smpl::ExtractRobotStateExtension>()->extractState(state_id);
-
-            // Norm of first 5 joints.
-            double norm = 0.0;
-            for(int i=3; i<8; i++)
-                norm += (retracted_robot_state[i]*retracted_robot_state[i]);
-            norm = sqrt(norm);
-            int retract_heuristic = DefaultCostMultiplier * norm;
-
-            int base_dist = bfs_3d_base->GetGoalHeuristic(state_id);
-
-            int heuristic = base_coeff*base_dist + retract_arm_coeff*retract_heuristic;
-
-            return heuristic;
-        }
-
-        double base_coeff = 0.0;
-        double retract_arm_coeff = 10.0;
-
-    };
-
-    struct ImprovedEndEffHeuristic : public BfsHeuristic {
-        bool init(std::shared_ptr<smpl::Bfs3DBaseHeuristic> _bfs_3d_base,
-                std::shared_ptr<smpl::Bfs3DHeuristic> _bfs_3d,
-                std::shared_ptr<RetractArmHeuristic> _retract_arm){
-            if(!BfsHeuristic::init(_bfs_3d_base, _bfs_3d))
-                return false;
-            m_retract_arm_heur = _retract_arm;
-            pose_ext = bfs_3d->planningSpace()->getExtension<smpl::PoseProjectionExtension>();
-            return true;
-        }
-
-        int GetGoalHeuristic(int state_id){
-            if (state_id == bfs_3d->planningSpace()->getGoalStateID()) {
-                return 0;
-            }
-            if(pose_ext == nullptr)
-                return 0;
-            smpl::Affine3 p;
-            if(!pose_ext->projectToPose(state_id, p))
-                return 0;
-
-            auto goal_pose = bfs_3d->planningSpace()->goal().pose;
-
-            smpl::Quaternion qa(p.rotation());
-            smpl::Quaternion qb(goal_pose.rotation());
-            double dot = qa.dot(qb);
-            if (dot < 0.0) {
-                qb = smpl::Quaternion(-qb.w(), -qb.x(), -qb.y(), -qb.z());
-                dot = qa.dot(qb);
-            }
-            int rot_dist = DefaultCostMultiplier*smpl::angles::normalize_angle(2.0 * std::acos(dot));
-
-            int base_dist = bfs_3d_base->GetGoalHeuristic(state_id);
-            int arm_dist  = 0;
-            if(arm_dist > 10000){
-                arm_dist = m_retract_arm_heur->GetGoalHeuristic(state_id);
-                rot_dist = 0.0;
-            } else {
-                arm_dist = bfs_3d->GetGoalHeuristic(state_id);
-            }
-
-            int heuristic = base_coeff*base_dist + arm_coeff*arm_dist + rot_coeff*rot_dist;
-            return heuristic;
-        }
-
-        double base_coeff=0.05;
-        double arm_coeff=1;
-        double rot_coeff=2;
-
-        std::shared_ptr<RetractArmHeuristic> m_retract_arm_heur;
-        smpl::PoseProjectionExtension* pose_ext = nullptr;
-    };
-
-    struct BaseRotHeuristic : public BfsHeuristic {
-        bool init(std::shared_ptr<smpl::Bfs3DBaseHeuristic> _bfs_3d_base,
-                std::shared_ptr<smpl::Bfs3DHeuristic> _bfs_3d,
-                std::shared_ptr<RetractArmHeuristic> _retract_arm,
-                double _orientation){
-            if(!BfsHeuristic::init(_bfs_3d_base, _bfs_3d))
-                return false;
-            m_retract_arm_heur = _retract_arm;
-            orientation = _orientation;
-            return true;
-        }
-
-        int GetGoalHeuristic(int state_id){
-            if(state_id == 0)
-                return 0;
-            auto robot_state = (dynamic_cast<smpl::ManipLattice*>(
-                        bfs_3d->planningSpace()))->extractState(state_id);
-            int yaw_dist = DefaultCostMultiplier*smpl::angles::shortest_angle_dist(robot_state[2], orientation);
-
-            int base_dist = bfs_3d_base->GetGoalHeuristic(state_id);
-            double arm_fold_heur = 0.0;
-            if(base_dist > 10000)
-                arm_fold_heur = m_retract_arm_heur->GetGoalHeuristic(state_id);
-
-            int heuristic = base_dist + orientation_coeff*yaw_dist + arm_fold_coeff*arm_fold_heur;
-            //ROS_ERROR("%d + %d + %d = %d", int(base_dist), int(orientation_coeff*yaw_dist), int(arm_fold_coeff*arm_fold_heur), heuristic);
-            return heuristic;
-        }
-
-        std::shared_ptr<RetractArmHeuristic> m_retract_arm_heur;
-        double orientation = 0.0;
-        double orientation_coeff = 5.0;
-        double arm_fold_coeff = 1.0;
-    };
-
-
-    auto bfs_2d = std::make_unique<smpl::Bfs2DHeuristic>();
-    bfs_2d->setCostPerCell(params.cost_per_cell);
-    bfs_2d->setInflationRadius(params.inflation_radius_2d);
-    if (!bfs_2d->init(pspace, grid)) {
-        ROS_ERROR("Could not initialize Bfs2Dheuristic.");
-        return false;
-    }
-
-    auto bfs_3d = std::make_shared<smpl::Bfs3DHeuristic>();
-    bfs_3d->setCostPerCell(params.cost_per_cell);
-    bfs_3d->setInflationRadius(params.inflation_radius_3d);
-    if (!bfs_3d->init(pspace, grid)) {
-        ROS_ERROR("Could not initialize Bfs3Dheuristic.");
-        return false;
-    }
-
-    auto bfs_3d_base = std::make_shared<smpl::Bfs3DBaseHeuristic>();
-    bfs_3d_base->setCostPerCell(params.cost_per_cell);
-    bfs_3d_base->setInflationRadius(params.inflation_radius_2d);
-    if (!bfs_3d_base->init(pspace, grid, 4)) {
-        ROS_ERROR("Could not initialize Bfs3DBaseHeuristic");
-        return false;
-    }
-
-    auto retract_arm = std::make_shared<RetractArmHeuristic>();
-    if(!retract_arm->init(bfs_3d_base, bfs_3d)){
-        ROS_ERROR("Could not initialize RetractArmHeuristic initialize");
-        return false;
-    }
-
-    //Compute a feasible base location.
-    std::vector<int> base_x, base_y;
-    heurs.clear();
-
-    {
-        auto anchor = std::make_unique<AnchorHeuristic>();
-        anchor->init( bfs_3d_base, bfs_3d );
-        heurs.push_back(std::move(anchor));
-    }
-    { //EndEffector
-        auto inad = std::make_unique<ImprovedEndEffHeuristic>();
-        inad->init( bfs_3d_base, bfs_3d, retract_arm );
-        heurs.push_back(std::move(inad));
-    }
-
-    int num_rot_heurs = 8;
-    for(int i=0; i<num_rot_heurs; i++){
-        auto h = std::make_unique<BaseRotHeuristic>();
-        if (!h->init(bfs_3d_base, bfs_3d, retract_arm, 6.28/num_rot_heurs*i)) {
-            ROS_ERROR("Could not initialize heuristic.");
-            return false;
-        }
-        heurs.push_back(std::move(h));
-    }
-
-    for (auto& entry : heurs) {
-        pspace->insertHeuristic(entry.get());
-    }
-    return true;
-}
 
 class ReadExperimentsFromFile {
     public:
@@ -370,9 +106,9 @@ smpl::GoalConstraint stringToGoalConstraint(std::string _pose_str){
     smpl::GoalConstraint goal;
     goal.type = smpl::GoalType::XYZ_RPY_GOAL;
     goal.pose = goal_pose;
-    goal.xyz_tolerance[0] = 0.05;
-    goal.xyz_tolerance[1] = 0.05;
-    goal.xyz_tolerance[2] = 0.05;
+    goal.xyz_tolerance[0] = 0.06;
+    goal.xyz_tolerance[1] = 0.06;
+    goal.xyz_tolerance[2] = 0.06;
     goal.rpy_tolerance[0] = 0.39;
     goal.rpy_tolerance[1] = 0.39;
     goal.rpy_tolerance[2] = 0.39;
@@ -444,8 +180,8 @@ void writePath(std::string _file_name, std::string _header, std::vector<smpl::Ro
 }
 
 int main(int argc, char** argv) {
-    SMPL_INFO("Testing the new templated MRMHAPlanner.");
-    ros::init(argc, argv, "test_templated_mrmha_planner");
+    SMPL_INFO("Testing the MRMHAPlanner Contextual Bandits");
+    ros::init(argc, argv, "mrmhaplanner_cobandits");
     ros::NodeHandle nh;
     ros::NodeHandle ph("~");
     ros::Rate loop_rate(10);
@@ -627,9 +363,12 @@ int main(int argc, char** argv) {
     //Planning////
     /////////////
 
-    std::vector< std::unique_ptr<smpl::RobotHeuristic> > robot_heurs;
+    std::array< std::shared_ptr<smpl::RobotHeuristic>, NUM_QUEUES > robot_heurs;
+    std::vector< std::shared_ptr<smpl::RobotHeuristic> > bfs_heurs;
 
-    if(!constructHeuristics( robot_heurs, space.get(), grid_ptr.get(), rm.get(), planning_config )){
+    std::array<int, NUM_QUEUES> rep_ids;
+
+    if(!constructHeuristics( robot_heurs, rep_ids, bfs_heurs, space.get(), grid_ptr.get(), rm.get(), planning_config )){
         ROS_ERROR("Could not construct heuristics.");
         return 0;
     }
@@ -650,49 +389,69 @@ int main(int argc, char** argv) {
     Heuristic* anchor_heur = heurs[0];
     std::vector<Heuristic*> inad_heurs( heurs.begin() + 1, heurs.end() );
 
-    std::array<int, NUM_QUEUES> rep_ids;
-    for(auto& ele : rep_ids)
-        ele = (int)Base;
-    rep_ids[0] = (int)Fullbody;
-    rep_ids[1] = (int)Fullbody;
-
-    // if aij = 1 :  closed in rep i => closed in rep j
+    //if aij = 1 :  closed in rep i => closed in rep j
     std::array< std::array<int, NUM_ACTION_SPACES>, NUM_ACTION_SPACES >
         rep_dependency_matrix = {{ {{1, 1, 1}},
                                   {{0, 1, 0}},
-                                  {{0, 1, 0}} }};
+                                  {{0, 0, 1}} }};
+        //rep_dependency_matrix = {{ {{1, 1}},
+                                  //{{0, 1}} }};
 
-    //auto uniformly_random_policy = std::make_unique<UniformlyRandomPolicy>(inad_heurs.size(), 100);
-    auto round_robin_policy = std::make_unique<RoundRobinPolicy>(inad_heurs.size());
+    // Context
+    using ContextArray = std::array<int, 4>;
+    using ContextT = MobManipDiscreteFeatures<4>;
+    auto context_features = std::make_unique<ContextT> (rm.get(), space.get(), nullptr,
+            dynamic_cast<smpl::Bfs3DBaseHeuristic*> (bfs_heurs[0].get()),
+            dynamic_cast<smpl::Bfs3DHeuristic*> (bfs_heurs[1].get()) );
 
-    //using Planner = MRMHAPlanner<NUM_QUEUES, NUM_ACTION_SPACES, UniformlyRandomPolicy>;
-    using Planner = MRMHAPlanner<NUM_QUEUES, NUM_ACTION_SPACES, RoundRobinPolicy>;
-    //using Planner = MHAPlanner<NUM_QUEUES, RoundRobinPolicy>;
-    //auto search_ptr = std::make_unique<Planner>(
-    //        space.get(), heurs_array, rep_ids, rep_dependency_matrix, uniformly_random_policy.get() );
+    const unsigned int seed = 100;
+    using PolicyT = ContextualDTSPolicy<ContextArray>;
+    auto dts_policy = std::make_unique<PolicyT>(NUM_ACTION_SPACES, 100);
+    std::string beta_file_name;
+    ph.getParam("beta_prior_file", beta_file_name);
+    dts_policy->loadBetaPrior(beta_file_name);
+
+    //std::vector<ContextArray> contexts;
+    //std::vector<int> context_ids;
+
+    //for(int i = 0; i < 16; i++)
+    //{
+        //ContextArray context = {0, 0, 0, 0};
+        //contexts.push_back(context);
+        //context_ids.push_back(i);
+    //}
+    //// Narrow passage near
+    //contexts[0] = {0, 0, 0, 1};
+    //contexts[1] = {1, 1, 0, 1};
+
+    //dts_policy->setContextIdMap(contexts, context_ids);
+    //dts_policy->setBetaPrior(contexts[0], (int)Fullbody, 9, 1 );
+    //dts_policy->setBetaPrior(contexts[0], (int)Arm, 1, 9 );
+    //dts_policy->setBetaPrior(contexts[1], (int)Arm, 9, 1 );
+
+    using Planner = MRMHAPlannerCoBandits<NUM_QUEUES, NUM_ACTION_SPACES, PolicyT, ContextT>;
     auto search_ptr = std::make_unique<Planner>(
-            space.get(), heurs_array, rep_ids, rep_dependency_matrix, round_robin_policy.get() );
-    //auto search_ptr = std::make_unique<Planner>(space.get(), heurs_array, round_robin_policy.get());
-
+            space.get(), heurs_array, rep_ids, rep_dependency_matrix,
+            dts_policy.get(), context_features.get() );
     const int max_planning_time = planning_config.planning_time;
     const double eps = planning_config.eps;
     const double eps_mha = planning_config.eps_mha;
     MPlanner::PlannerParams planner_params = { max_planning_time, eps, eps_mha, false };
 
-    //using MotionPlanner = MPlanner::MotionPlanner<Planner, smpl::ManipLatticeMultiRep>;
-    using MotionPlanner = MPlanner::MotionPlanner<Planner, smpl::ManipLattice>;
+    using MotionPlanner = MPlanner::MotionPlanner<Planner, smpl::ManipLatticeMultiRep>;
     auto mplanner = std::make_unique<MotionPlanner>();
     mplanner->init(search_ptr.get(), space.get(), heurs, planner_params);
 
-    MotionPlannerROS< Callbacks, ReadExperimentsFromFile, MotionPlanner > mplanner_ros(ph, rm.get(), scene_ptr.get(), mplanner.get(), grid_ptr.get());
+    MotionPlannerROS< Callbacks<>, ReadExperimentsFromFile, MotionPlanner > mplanner_ros(ph, rm.get(), scene_ptr.get(), mplanner.get(), grid_ptr.get());
 
     ExecutionStatus status = ExecutionStatus::WAITING;
-    //while(status == ExecutionStatus::WAITING) {
     std::string file_prefix = "paths/solution_path";
     std::ofstream stats_file;
     PlanningEpisode ep = planning_config.start_planning_episode;
     while(ep <= planning_config.end_planning_episode){
         ROS_ERROR("Episode: %d", ep);
+        dts_policy->setSeed(rand());
+        dts_policy->resetPrior();
         loop_rate.sleep();
         std::string file_suffix = std::to_string(ep) + ".txt";
         status = mplanner_ros.execute(ep);
@@ -702,6 +461,8 @@ int main(int argc, char** argv) {
             ROS_INFO("Planning Time: %f", mplanner_ros.getPlan(ep).planning_time);
             ROS_INFO("----------------");
             auto plan = mplanner_ros.getPlan(ep).robot_states;
+            space->clearStates();
+            search_ptr->force_planning_from_scratch();
 
             // Write to file.
             stats_file.open("planning_stats.txt", std::ios::app);

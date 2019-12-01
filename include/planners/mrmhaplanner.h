@@ -11,6 +11,14 @@
 
 #define INFINITECOST std::numeric_limits<int>::max()
 
+struct MRPlannerStats
+{
+    double total;
+    double expand;
+    double features;
+    double scheduling;
+};
+
 /**
  * N : Number of queues
  * R : Number of representations
@@ -176,6 +184,7 @@ class MRMHAPlanner : public SBPLPlanner {
     int m_num_expansions;
     int m_max_expansions;
     double m_time_elapsed;
+    MRPlannerStats m_stats;
 
     bool check_params(const ReplanParams& params);
     bool time_limit_reached();
@@ -209,7 +218,7 @@ class MRMHAPlanner : public SBPLPlanner {
 
     void clear_open_lists();
     void clear();
-    int compute_key(MRMHASearchState* state, int hidx);
+    virtual int compute_key(MRMHASearchState* state, int hidx);
 
     MRMHASearchState* state_from_open_state(typename MRMHASearchState::HeapData* open_state){
         return open_state->me;

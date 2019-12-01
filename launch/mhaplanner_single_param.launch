@@ -5,7 +5,7 @@
     <arg name="rvizconfig" default ="$(find walker_planner)/config/urdf.rviz" />
 
 
-    <!-- <include file="$(find walker_planner)/launch/planning_context_walker.launch"/> -->
+    <include file="$(find walker_planner)/launch/planning_context_walker.launch"/>
 
     <arg unless="$(arg debug)" name="launch-prefix" value=""/>
     <arg     if="$(arg debug)" name="launch-prefix" value="gdb -ex run --args"/>
@@ -18,7 +18,8 @@
     <!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rvizconfig)"
 required="true" /> -->
 
-    <node pkg="walker_planner" type="mrmhaplanner" name="mrmhaplanner"
+    <node pkg="walker_planner" type="mhaplanner_single_param"
+    name="mhaplanner_single_param"
             launch-prefix="$(arg launch-prefix)" output="screen" required="true">
         <param name="planning_frame" value="dummy_base"/>
 
@@ -49,27 +50,28 @@ required="true" /> -->
         <rosparam command="load" file="$(find walker_planner)/config/walker_right_arm.yaml"/>
         <param name="planning/mprim_filenames" value="$(find
         walker_planner)/config/walker_multi_rep.mprim,$(find
-        walker_planner)/config/walker_multi_rep_base.mprim,$(find
-        walker_planner)/config/walker_multi_rep_right_arm.mprim"/>
+        walker_planner)/config/walker_multi_rep_right_arm.mprim,$(find
+        walker_planner)/config/walker_multi_rep_base.mprim"/>
 
         <param name="planning/mprim_filename" value="$(find
         walker_planner)/config/walker_multi_rep.mprim"/>
 
-        <param name="allowed_planning_time" value="20.0"/>
+        <param name="allowed_planning_time" value="60.0"/>
         <param name="read_goal_from_file" value="true"/>
         <!-- <param name="robot_start_states_file" value="$(find
-        walker_planner)/experiments/start_states.txt" />
-        <param name="robot_goal_states_file" value="$(find
+        walker_planner)/experiments/start_states.txt" /> -->
+        <!-- <param name="robot_goal_states_file" value="$(find
         walker_planner)/experiments/goal_poses.txt" /> -->
 
         <!-- 2. scene -->
         <!-- 2.1 robot state -->
-        <rosparam command="load" file="$(find walker_planner)/experiments/walker_goal_mrmha.yaml"/>
+        <rosparam command="load" file="$(find
+        walker_planner)/experiments/walker_goal_mrmha.yaml"/>
 
         <rosparam command="load" file="$(find walker_planner)/env/multi_room_map.yaml" />
 
         <!-- 2.2 world state -->
-        <!-- <param name="object_filename" value="$(find walker_planner)/env/proj_env.env"/> -->
+        <param name="object_filename" value="$(find walker_planner)/experiments/train/easy/multi_room_map.env"/>
 
         <!-- 3. scenario -->
 

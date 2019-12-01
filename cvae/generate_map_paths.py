@@ -37,7 +37,8 @@ class MRMHAInterface():
         self.PACKAGE_ROOT = rospack.get_path('walker_planner')
         self.URDF_LAUNCH_FILE = "{}/launch/planning_context_walker.launch".format(self.PACKAGE_ROOT)
         self.GEN_START_GOAL_LAUNCH_FILE = "{}/launch/generate_start_goals.launch".format(self.PACKAGE_ROOT)
-        self.GEN_PATHS_LAUNCH_FILE = "{}/launch/mrmhaplanner.launch".format(self.PACKAGE_ROOT)
+        # self.GEN_PATHS_LAUNCH_FILE = "{}/launch/mrmhaplanner.launch".format(self.PACKAGE_ROOT)
+        self.GEN_PATHS_LAUNCH_FILE = "{}/launch/test_mrmha_cvae.launch".format(self.PACKAGE_ROOT)
 
         # Path which will be used temporarily for generating .txt files and paths
         self.temp_path = "{}/ros_temp".format(os.getcwd())
@@ -90,17 +91,13 @@ class MRMHAInterface():
         shutil.move(goal_states_path, env_output_path)
         shutil.move(paths_path, env_output_path)
         
-    def run_cvae(self, env_id, gaps, start_state, goal_state):
+    def run_cvae(self, env_id, gaps, start_state, goal_state, decoder_path, output_path):
         condition = np.hstack((start_state[:2], goal_state[:2], gaps)) 
         cvae_interface = CVAEInterface(run_id="planner_test",
-                                    output_path=self.output_path,
+                                    output_path=output_path,
                                     env_path_root=self.env_path_root)
         cvae_interface.load_saved_cvae(decoder_path)
         cvae_samples = cvae_interface.test_single(env_id, sample_size=1000, c_test=condition)
-
-        fig = plt.figure()
-        cvae_interface.visualize_map(env_id)
-        generate_gaussian(cvae_samples, X_MAX, Y_MAX, visualize=True, fig=fig)
 
         return cvae_samples
 
@@ -114,19 +111,23 @@ class MRMHAInterface():
             env_dir_path = "{}/{}/dump_0".format(input_path, env_i)
             start_states_path = "{}/start_states.txt".format(env_dir_path)
             goal_states_path = "{}/goal_poses.txt".format(env_dir_path)
+            arm_cvae_output_path = "arm_cvae_output_temp"
+            arm_output_file_path = "{}/gen_points_0.txt".format(arm_cvae_output_path)
             params = {
                 "mrmhaplanner/object_filename" : env_file_path,
                 "mrmhaplanner/robot_start_states_file" : start_states_path,
                 "mrmhaplanner/robot_goal_states_file" : goal_states_path,
                 "mrmhaplanner/planning/start_planning_episode" : 0,
-                "mrmhaplanner/planning/end_planning_episode" : 1
+                "mrmhaplanner/planning/end_planning_episode" : 1,
+                "mrmhaplanner/arm_file_name" : arm_output_file_path,
+                "mrmhaplanner/base_file_name" : arm_output_file_path,
             }
             self.set_ros_param_from_dict(params)
             gaps = np.array(get_gaps(env_file_path), dtype=np.float32)
             start_state = np.loadtxt(start_states_path, skiprows=1)[0,:]
             goal_state = np.loadtxt(goal_states_path, skiprows=1)[0,:]
             # Run CVAE
-            cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state)
+            cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state, self.decoder_path, arm_cvae_output_path)
             # Do GMM
 
             # Run Planner

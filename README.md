@@ -70,7 +70,7 @@ Generating Traj (Python)
 ------------------------
 1. Launch the URDF package in sepearate shell and keep it running :
 ```
-roslaunch wheeled_walker planning_context_walker.launch
+roslaunch walker_planner planning_context_walker.launch
 ```
 2. Go to cvae folder
 3. Run the following python script giving a list of map filname index to run the planner for :

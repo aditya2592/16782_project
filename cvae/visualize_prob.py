@@ -33,6 +33,33 @@ def create_3dwall(ax, x_range, y_range, z_range):
     ax.plot_wireframe(xx, np.array([[y_range[1],y_range[1]]]), zz, color="r", zorder=10)
     ax.plot_surface(xx, np.array([[y_range[1],y_range[1]]]), zz, color="r", alpha=0.5, zorder=10)
 
+def generate_gaussian(samples, length, width, visualize=True, fig=None):
+
+    X = np.arange(0, length, 0.1)
+    Y = np.arange(0, width, 0.1)
+    X_, Y_ = np.meshgrid(X, Y)
+        
+    g = mixture.GaussianMixture(n_components=6)  
+    g.fit(samples)
+    
+    if visualize:
+        Z_ = g.score_samples(np.concatenate((X_.reshape(-1,1), Y_.reshape((-1,1))), axis=1))
+        Z_ = np.exp(Z_)
+        Z_ = Z_.reshape(X_.shape)
+        levels = np.arange(0, 1, 0.1)
+
+        # fig = plt.figure()
+        ax = fig.gca()
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.title('Sample Map')
+        plt.xlim(0, length)
+        plt.ylim(0, width)
+        surf = ax.contourf(X_, Y_, Z_, levels,cmap=cm.Blues, zorder=-1)
+        fig.colorbar(surf, shrink=0.5, aspect=5)
+        plt.show()
+
+
 def visualize(path_file, samples_file, length, width):
     fig = plt.figure()
     ax = fig.gca(projection='3d')

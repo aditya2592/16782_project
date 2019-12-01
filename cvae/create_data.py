@@ -15,7 +15,6 @@ def get_walls(complete_env_path):
         while line:
             if "wall" in line:
                 wall = line.strip(" ").strip("\n").split(" ")[1:3]
-                walls.extend(wall)
                 count = count + 1
             
             line = e.readline()

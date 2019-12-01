@@ -158,7 +158,7 @@ class CVAEInterface():
         plt.draw()
         
 
-    def plot(self, x, c, env_id=None, suffix=0, write_file=False):
+    def plot(self, x, c, env_id=None, suffix=0, write_file=False, show=False):
         '''
             Plot samples and environment - from train input or predicted output
         '''
@@ -187,11 +187,13 @@ class CVAEInterface():
             plt.savefig('{}/gen_points_fig_{}.png'.format(self.output_path, suffix))
             np.savetxt('{}/gen_points_{}.txt'.format(self.output_path, suffix), x, fmt="%.2f", delimiter=',')
             np.savetxt('{}/start_goal_{}.txt'.format(self.output_path, suffix), np.vstack((start, goal)), fmt="%.2f", delimiter=',')
-        # plt.show()
+        if show:
+            plt.show()
         # plt.close(fig1)
         return fig1
 
     def load_saved_cvae(self, decoder_path):
+        print("Loading saved CVAE")
         self.cvae.load_decoder(decoder_path)
 
         # base_cvae = CVAE(run_id=run_id)
@@ -199,6 +201,16 @@ class CVAEInterface():
         # base_cvae.load_decoder(base_decoder_path)
 
         # for iteration, batch in enumerate(dataloader):
+    def test_single(self, env_id, sample_size=1000, c_test=None, visualize=True):
+        self.cvae.eval()
+        c_test_gpu = torch.from_numpy(c_test).float().to(self.device)
+        c_test_gpu = torch.unsqueeze(c_test_gpu, dim=0)
+        x_test = self.cvae.inference(sample_size=sample_size, c=c_test_gpu)
+        x_test = x_test.detach().cpu().numpy()
+
+        if visualize:
+            self.plot(x_test, c_test, env_id=env_id, show=False)
+        return x_test
 
     def test(self, epoch, dataloader, write_file=False, suffix=""):
 

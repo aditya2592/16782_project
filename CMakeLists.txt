@@ -59,15 +59,15 @@ add_message_files(
     Path1.msg
 )
 
-generate_messages(
-    DEPENDENCIES
-    std_msgs
-    )
-
 add_service_files(
    FILES
    Prediction.srv
  )
+
+generate_messages(
+    DEPENDENCIES
+    std_msgs
+    )
 
 catkin_package(
 INCLUDE_DIRS include

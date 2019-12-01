@@ -32,13 +32,34 @@ class prediction_server:
         self.g = mixture.GaussianMixture(n_components=3)  
         self.g.fit(np.array(cvae_samples))    
         
+        # normalizing constants
+        X = np.arange(0, X_MAX, 0.1)
+        Y = np.arange(0, Y_MAX, 0.1)
+        X_, Y_ = np.meshgrid(X, Y)
+        
+        Z_ = self.g.score_samples(np.concatenate((X_.reshape(-1,1), Y_.reshape((-1,1))), axis=1))
+        Z_ = np.exp(Z_)
+            
+        self.min = np.min(Z_)
+        self.max = np.max(Z_)
+        
+        # prediction service
         self.prediction_srv = rospy.Service('~prediction', Prediction, self.prediction_callback)
     
     def prediction_callback(self, req):
         
-        score = self.g.score_samples(np.array([req.x, req.y]))
-        
-        return PredictionResponse(prediction=score)
+        try:
+            # score
+            score = self.g.score_samples(np.array([req.x, req.y]))
+            score = np.exp(score)
+            
+            # normalize
+            score = (score - self.min)/(self.max - self.min)
+            
+            return PredictionResponse(prediction=score, success=True)
+        except Exception as e:
+            print(e)
+            return PredictionResponse(Prediction=-1, success=False)
         
 
 class MRMHAInterface():

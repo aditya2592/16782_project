@@ -1,0 +1,7 @@
+# request fields
+float32 x
+float32 y
+---
+# reply fields
+float32 prediction
+bool success

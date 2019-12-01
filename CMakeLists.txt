@@ -21,7 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
   sbpl_kdl_robot_model
   trac_ik_robot_model
   smpl_ompl_interface
-  smpl_moveit_interface
+  #smpl_moveit_interface
   visualization_msgs
 )
 
@@ -89,9 +89,9 @@ set( PLANNERS
 set (AUXILIARY
     src/utils/utils.cpp)
 
-add_executable(collision_model_visualizer src/debug/collision_model_visualizer.cpp
-    src/config/collision_space_scene.cpp)
-target_link_libraries(collision_model_visualizer ${catkin_LIBRARIES} smpl::smpl)
+#add_executable(collision_model_visualizer src/debug/collision_model_visualizer.cpp
+#    src/config/collision_space_scene.cpp)
+#target_link_libraries(collision_model_visualizer ${catkin_LIBRARIES} smpl::smpl)
 
 #add_executable( test_motion_planner
 #    src/mha/test_motion_planner.cpp

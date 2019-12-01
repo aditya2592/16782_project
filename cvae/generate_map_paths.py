@@ -3,8 +3,12 @@ import os
 import shutil
 import argparse
 import rospkg
+import rospy
+from sklearn import mixture
 import subprocess 
 import matplotlib.pyplot as plt
+
+from walker_planner.srv import Prediction, PredictionRequest, PredictionResponse
 
 from create_data import get_gaps
 from run import CVAEInterface
@@ -19,6 +23,23 @@ def delete_mkdir(output_path):
 def mkdir_if_missing(output_path):
     if os.path.exists(output_path) == False:
         os.mkdir(output_path)
+
+class prediction_server:
+    def __init__(self, cvae_samples):
+        self.cvae_samples = cvae_samples
+        
+        # generate gmm model
+        self.g = mixture.GaussianMixture(n_components=3)  
+        self.g.fit(np.array(cvae_samples))    
+        
+        self.prediction_srv = rospy.Service('~prediction', Prediction, self.prediction_callback)
+    
+    def prediction_callback(self, req):
+        
+        score = self.g.score_samples(np.array([req.x, req.y]))
+        
+        return PredictionResponse(prediction=score)
+        
 
 class MRMHAInterface():
     
@@ -98,9 +119,9 @@ class MRMHAInterface():
         cvae_interface.load_saved_cvae(decoder_path)
         cvae_samples = cvae_interface.test_single(env_id, sample_size=1000, c_test=condition)
 
-        fig = plt.figure()
-        cvae_interface.visualize_map(env_id)
-        generate_gaussian(cvae_samples, X_MAX, Y_MAX, visualize=True, fig=fig)
+        # fig = plt.figure()
+        # cvae_interface.visualize_map(env_id)
+        # generate_gaussian(cvae_samples, X_MAX, Y_MAX, visualize=True, fig=fig)
 
         return cvae_samples
 
@@ -127,7 +148,10 @@ class MRMHAInterface():
             goal_state = np.loadtxt(goal_states_path, skiprows=1)[0,:]
             # Run CVAE
             cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state)
+            
             # Do GMM
+            ps = prediction_server(cvae_samples)
+            rospy.spin()
 
             # Run Planner
             # self.launch_ros_node(self.GEN_PATHS_LAUNCH_FILE)

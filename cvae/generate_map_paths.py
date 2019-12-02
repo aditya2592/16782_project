@@ -103,8 +103,10 @@ class MRMHAInterface():
         self.PACKAGE_ROOT = rospack.get_path('walker_planner')
         self.URDF_LAUNCH_FILE = "{}/launch/planning_context_walker.launch".format(self.PACKAGE_ROOT)
         self.GEN_START_GOAL_LAUNCH_FILE = "{}/launch/generate_start_goals.launch".format(self.PACKAGE_ROOT)
-        # self.GEN_PATHS_LAUNCH_FILE = "{}/launch/mrmhaplanner.launch".format(self.PACKAGE_ROOT)
-        self.GEN_PATHS_LAUNCH_FILE = "{}/launch/test_mrmha_cvae.launch".format(self.PACKAGE_ROOT)
+        self.GEN_PATHS_LAUNCH_FILE = "{}/launch/mrmhaplanner.launch".format(self.PACKAGE_ROOT)
+        self.PLANNER_PARAM_PREFIX = "mrmhaplanner"
+        # self.GEN_PATHS_LAUNCH_FILE = "{}/launch/test_mrmha_cvae.launch".format(self.PACKAGE_ROOT)
+        # self.PLANNER_PARAM_PREFIX = "test_mrmha_cvae"
 
         # Path which will be used temporarily for generating .txt files and paths
         self.temp_path = "{}/ros_temp".format(os.getcwd())
@@ -112,9 +114,9 @@ class MRMHAInterface():
         os.environ["ROS_HOME"] = self.temp_path
 
         # Create output directory if doesnt exist, stores final paths for each envt
-        mkdir_if_missing(self.output_path)
+        if self.output_path is not None:
+            mkdir_if_missing(self.output_path)
 
-        self.decoder_path = decoder_path
 
     
     def set_ros_param_from_dict(self, params):
@@ -149,7 +151,9 @@ class MRMHAInterface():
         params = {
                 "mrmhaplanner/object_filename" : env_file_path,
                 "mrmhaplanner/robot_start_states_file" : start_states_path,
-                "mrmhaplanner/robot_goal_states_file" : goal_states_path
+                "mrmhaplanner/robot_goal_states_file" : goal_states_path,
+                "mrmhaplanner/planning/start_planning_episode" : 0,
+                "mrmhaplanner/planning/end_planning_episode" : 499,
             }
         self.set_ros_param_from_dict(params)
         self.launch_ros_node(self.GEN_PATHS_LAUNCH_FILE)
@@ -157,9 +161,9 @@ class MRMHAInterface():
         shutil.move(goal_states_path, env_output_path)
         shutil.move(paths_path, env_output_path)
         
-    def run_cvae(self, env_id, gaps, start_state, goal_state, decoder_path, output_path):
+    def run_cvae(self, env_id, gaps, start_state, goal_state, decoder_path, output_path, run_id):
         condition = np.hstack((start_state[:2], goal_state[:2], gaps)) 
-        cvae_interface = CVAEInterface(run_id="planner_test",
+        cvae_interface = CVAEInterface(run_id=run_id,
                                     output_path=output_path,
                                     env_path_root=self.env_path_root)
         cvae_interface.load_saved_cvae(decoder_path)
@@ -172,7 +176,7 @@ class MRMHAInterface():
         return cvae_samples
 
 
-    def run_test(self, input_path=""):
+    def run_test(self, input_path="", arm_decoder_path="", base_decoder_path="", episode_id=0):
         '''
             Given start/goal pairs already generated, run planner
         '''
@@ -181,29 +185,32 @@ class MRMHAInterface():
             env_dir_path = "{}/{}/dump_0".format(input_path, env_i)
             start_states_path = "{}/start_states.txt".format(env_dir_path)
             goal_states_path = "{}/goal_poses.txt".format(env_dir_path)
-            arm_cvae_output_path = "arm_cvae_output_temp"
+            arm_cvae_output_path = "{}/arm_cvae_output_temp".format(os.getcwd())
+            base_cvae_output_path = "{}/base_cvae_output_temp".format(os.getcwd())
             arm_output_file_path = "{}/gen_points_0.txt".format(arm_cvae_output_path)
+            base_output_file_path = "{}/gen_points_0.txt".format(base_cvae_output_path)
             params = {
-                "mrmhaplanner/object_filename" : env_file_path,
-                "mrmhaplanner/robot_start_states_file" : start_states_path,
-                "mrmhaplanner/robot_goal_states_file" : goal_states_path,
-                "mrmhaplanner/planning/start_planning_episode" : 0,
-                "mrmhaplanner/planning/end_planning_episode" : 1,
-                "mrmhaplanner/arm_file_name" : arm_output_file_path,
-                "mrmhaplanner/base_file_name" : arm_output_file_path,
+                "{}/object_filename".format(self.PLANNER_PARAM_PREFIX) : env_file_path,
+                "{}/robot_start_states_file".format(self.PLANNER_PARAM_PREFIX) : start_states_path,
+                "{}/robot_goal_states_file".format(self.PLANNER_PARAM_PREFIX) : goal_states_path,
+                "{}/planning/start_planning_episode".format(self.PLANNER_PARAM_PREFIX) : episode_id,
+                "{}/planning/end_planning_episode".format(self.PLANNER_PARAM_PREFIX) : episode_id,
+                "{}/arm_file_name".format(self.PLANNER_PARAM_PREFIX) : arm_output_file_path,
+                "{}/base_file_name".format(self.PLANNER_PARAM_PREFIX) : base_output_file_path,
             }
             self.set_ros_param_from_dict(params)
             gaps = np.array(get_gaps(env_file_path), dtype=np.float32)
-            start_state = np.loadtxt(start_states_path, skiprows=1)[0,:]
-            goal_state = np.loadtxt(goal_states_path, skiprows=1)[0,:]
+            start_state = np.loadtxt(start_states_path, skiprows=1)[episode_id,:]
+            goal_state = np.loadtxt(goal_states_path, skiprows=1)[episode_id,:]
             # Run CVAE
-            cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state, self.decoder_path, arm_cvae_output_path)
+            arm_cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state, arm_decoder_path, arm_cvae_output_path, "planner_arm_test")
+            base_cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state, base_decoder_path, base_cvae_output_path, "planner_base_test")
             # Do GMM
-            ps = prediction_server(cvae_samples)
-            rospy.spin()
+            # ps = prediction_server(cvae_samples)
+            # rospy.spin()
 
             # Run Planner
-            # self.launch_ros_node(self.GEN_PATHS_LAUNCH_FILE)
+            self.launch_ros_node(self.GEN_PATHS_LAUNCH_FILE)
 
 
     def run_generate(self):
@@ -237,13 +244,15 @@ def parse_arguments():
     '''
     parser = argparse.ArgumentParser()
     parser.add_argument('--env_path_root', required=True, dest='env_path_root', type=str, help="path where all .env files are present")
-    parser.add_argument('--output_path', required=True, dest='output_path', type=str, help="path where all generated paths will be dumped")
+    parser.add_argument('--output_path', required=False, dest='output_path', type=str, help="path where all generated paths will be dumped")
     parser.add_argument('--env_list', required=True, nargs='+', dest='env_list', help="environment numbers to use to generate data for")
-    parser.add_argument('--max_paths', required=True, dest='max_paths', type=int, help="number of paths to generate for each environment, multiples of 500, or number of paths in each envt to test on in test only mode")
+    parser.add_argument('--max_paths', required=False, dest='max_paths', type=int, help="number of paths to generate for each environment, multiples of 500, or number of paths in each envt to test on in test only mode")
     
     parser.add_argument('--test_only', dest='test_only', action='store_true', help="Whether to run planner in test only mode on start/goal pairs existing")
     parser.add_argument('--input_path', required=False, dest='input_path', type=str, help="path where all start/goal pairs are present for envts", default="")
-    parser.add_argument('--decoder_path', dest='decoder_path', type=str, help='path to decoder model for testing', default="")
+    parser.add_argument('--arm_decoder_path', dest='arm_decoder_path', type=str, help='path to decoder model for testing', default="")
+    parser.add_argument('--base_decoder_path', dest='base_decoder_path', type=str, help='path to decoder model for testing', default="")
+    parser.add_argument('--episode_id', dest='episode_id', type=str, help='id in start/goal file', default="")
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -257,18 +266,22 @@ if __name__ == "__main__":
     max_paths = args.max_paths
     test_only = args.test_only
     input_path = args.input_path
-    decoder_path = args.decoder_path
+    arm_decoder_path = args.arm_decoder_path
+    base_decoder_path = args.base_decoder_path
+    episode_id = int(args.episode_id)
 
     mrmha = MRMHAInterface(env_path_root = env_path_root, 
                         env_list = env_list,
                         max_paths = max_paths,
-                        output_path = output_path,
-                        decoder_path = decoder_path)
+                        output_path = output_path)
     if test_only:
-        print("Running test only mode")
+        print("Running test only mode for environemnt : {}, episode : {} (dump_0)".format(env_list, episode_id))
         assert(input_path != "")
-        assert(decoder_path != "")
-        mrmha.run_test(input_path=input_path)
+        assert(arm_decoder_path != "")
+        mrmha.run_test(input_path=input_path, 
+                    arm_decoder_path=arm_decoder_path, 
+                    base_decoder_path=base_decoder_path,
+                    episode_id=episode_id)
     else:
         mrmha.run_generate()
     

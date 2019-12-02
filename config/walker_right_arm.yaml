@@ -27,8 +27,9 @@ planning:
   eps: 10
   eps_mha: 1.5
   planning_time: 20
-  start_planning_episode: 0
-  end_planning_episode: 499
+  # setting from python for testing
+  # start_planning_episode: 0
+  # end_planning_episode: 499
   seed: 100
   seeds:
       - 100

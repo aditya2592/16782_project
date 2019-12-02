@@ -14,6 +14,7 @@ from create_data import get_gaps
 from run import CVAEInterface
 from visualize_prob import generate_gaussian
 from model_constants import *
+from matplotlib import cm
 
 def delete_mkdir(output_path):
     if os.path.exists(output_path):
@@ -31,12 +32,12 @@ class prediction_server:
         self.cvae_samples = cvae_samples
         
         # generate gmm model
-        self.g = mixture.GaussianMixture(n_components=3)  
+        self.g = mixture.GaussianMixture(n_components=2)  
         self.g.fit(np.array(cvae_samples))    
         
         # normalizing constants
-        X = np.arange(0, X_MAX, 0.1)
-        Y = np.arange(0, Y_MAX, 0.1)
+        X = np.arange(0, X_MAX, 1)
+        Y = np.arange(0, Y_MAX, 1)
         X_, Y_ = np.meshgrid(X, Y)
         
         Z_ = self.g.score_samples(np.concatenate((X_.reshape(-1,1), Y_.reshape((-1,1))), axis=1))
@@ -44,6 +45,27 @@ class prediction_server:
             
         self.min = np.min(Z_)
         self.max = np.max(Z_)
+
+        # normalize
+        Z_ = (Z_ - self.min)/(self.max - self.min)
+
+        print(self.min)
+        print(self.max)
+        print(Z_)
+        Z_ = Z_.reshape(X_.shape)
+        levels = np.arange(0, 1.1, 0.1)
+
+        fig = plt.figure()
+        ax = fig.gca()
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.title('Sample Map')
+        plt.xlim(0, X_MAX)
+        plt.ylim(0, Y_MAX)
+        surf = ax.contourf(X_, Y_, Z_, levels,cmap=cm.Blues, zorder=-1)
+        fig.colorbar(surf, shrink=0.5, aspect=5)
+        plt.savefig("test.png")
+
         
         # prediction service
         self.prediction_srv = rospy.Service('~prediction', Prediction, self.prediction_callback)
@@ -52,7 +74,7 @@ class prediction_server:
         
         try:
             # score
-            score = self.g.score_samples(np.array([req.x, req.y]))
+            score = self.g.score_samples(np.array([[req.x, req.y]]))
             score = np.exp(score)
             
             # normalize
@@ -61,7 +83,7 @@ class prediction_server:
             return PredictionResponse(prediction=score, success=True)
         except Exception as e:
             print(e)
-            return PredictionResponse(Prediction=-1, success=False)
+            return PredictionResponse(prediction=-1, success=False)
         
 
 class MRMHAInterface():

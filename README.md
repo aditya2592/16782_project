@@ -134,5 +134,5 @@ Testing CVAE
   Testing Full Pipeline
   ---------------------
   ```
-  python generate_map_paths.py --env_path_root $PWD/../env --output_path test_only --env_list 34 --max_paths 1 --test_only --input_path $PWD/../data/test/ --decoder_path experiments/cvae/arm_multi_env_tables/decoder-final.pkl
+python generate_map_paths.py --env_path_root $PWD/../env  --env_list 34 --test_only --input_path $PWD/../data/test/ --arm_decoder_path experiments/cvae/arm_multi_env_tables/decoder-final.pkl --base_decoder_path experiments/cvae/base_multi_env_tables/decoder-final.pkl --episode_id 5
   ```

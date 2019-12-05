@@ -8,7 +8,7 @@ from sklearn import mixture
 import subprocess 
 import matplotlib.pyplot as plt
 
-from walker_planner.srv import Prediction, PredictionRequest, PredictionResponse
+# from walker_planner.srv import Prediction, PredictionRequest, PredictionResponse
 
 from create_data import get_gaps, get_walls
 from run import CVAEInterface
@@ -172,7 +172,7 @@ class MRMHAInterface():
                                     output_path=output_path,
                                     env_path_root=self.env_path_root)
         cvae_interface.load_saved_cvae(decoder_path)
-        cvae_samples = cvae_interface.test_single(env_id, sample_size=1000, c_test=condition)
+        cvae_samples = cvae_interface.test_single(env_id, sample_size=500, c_test=condition)
 
         # fig = plt.figure()
         # cvae_interface.visualize_map(env_id)
@@ -205,9 +205,11 @@ class MRMHAInterface():
             }
             self.set_ros_param_from_dict(params)
             # Use gaps for new environment and walls for old one
-            # gaps = np.array(get_gaps(env_file_path), dtype=np.float32)
             if self.cvae_planner:
-                gaps = np.array(get_walls(env_file_path), dtype=np.float32)
+                if OBSTACLE_TYPE == "GAP":
+                    gaps = np.array(get_gaps(env_file_path), dtype=np.float32)
+                elif OBSTACLE_TYPE == "WALL":
+                    gaps = np.array(get_walls(env_file_path), dtype=np.float32)
                 start_state = np.loadtxt(start_states_path, skiprows=1)[episode_id,:]
                 goal_state = np.loadtxt(goal_states_path, skiprows=0)[episode_id,:]
                 # Run CVAE
@@ -301,10 +303,11 @@ if __name__ == "__main__":
             all_stats = {
                 'episode_id' : [],
                 'runtime' : [],
-                'expansions' : []
+                'expansions' : [],
+                'cost' : []
             }
             assert(output_path != "")
-            for episode_id in range(0,30):
+            for episode_id in range(0,50):
                 output_paths = mrmha.run_test(input_path=input_path, 
                                                         arm_decoder_path=arm_decoder_path, 
                                                         base_decoder_path=base_decoder_path,

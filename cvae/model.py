@@ -140,9 +140,9 @@ class CVAE(nn.Module):
             self.tf_path = '{}/{}/{}/'.format(self.experiment_path_prefix, self.run_id, self.tf_sub_path)
             if not os.path.exists(self.tf_path):
                 os.makedirs(self.tf_path)
-            # else:
-            #     shutil.rmtree(self.tf_path)
-            #     os.makedirs(self.tf_path)
+            else:
+                shutil.rmtree(self.tf_path, ignore_errors=True)
+                os.makedirs(self.tf_path, exist_ok=True)
 
             self.tboard = SummaryWriter(self.tf_path)
 

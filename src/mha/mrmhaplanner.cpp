@@ -512,7 +512,7 @@ int main(int argc, char** argv) {
                         whole_path.markers.push_back(m);
                     }
                     visualizer.visualize(smpl::visual::Level::Info, markers);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                    // std::this_thread::sleep_for(std::chrono::milliseconds(200));
                 }
             }
         }

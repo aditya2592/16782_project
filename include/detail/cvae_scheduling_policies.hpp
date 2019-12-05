@@ -21,6 +21,7 @@ CVAENNPolicy<C>::CVAENNPolicy( int _num_arms, int _num_reps ) :
     CVAEPolicy(_num_arms)
 {
     srand(3243);
+    // m_generator.seed(6000);
     m_rtrees.resize(_num_reps);
 }
 
@@ -43,6 +44,7 @@ int CVAENNPolicy<C>::getArm( const std::vector<C>& _contexts, const std::vector<
 {
     //std::vector<double> probs(_rep_ids.size());
     std::vector<int> likelihoods(_rep_ids.size());
+    // m_generator.seed(1200);
 
     ROS_DEBUG_NAMED(FINE_LOG, "Rep Probabilities: ");
     for(int i = 0; i < _contexts.size(); i++)
@@ -51,7 +53,7 @@ int CVAENNPolicy<C>::getArm( const std::vector<C>& _contexts, const std::vector<
         // Context is a vector with : x, y of base
         auto& context = _contexts[i];
         int id = _rep_ids[i];
-        double radius = 0.5;
+        double radius = 1.5;
         std::vector<int> counts(m_rtrees.size(), 0);
         Box box( Point(context[0] - radius, context[1] - radius),
                 Point(context[0] + radius, context[1] + radius) );
@@ -64,7 +66,36 @@ int CVAENNPolicy<C>::getArm( const std::vector<C>& _contexts, const std::vector<
             counts[j] = nearest_neighbours[j].size();
         }
         if( std::any_of(counts.begin() + 1, counts.end(), [](int x){ return x == 0; }) )
-            likelihoods[i] = 100 * 0.5;//-1;
+        {
+            // likelihoods[i] = 100 * 0.5;//-1;
+            // if( std::all_of(counts.begin() + 1, counts.end(), [](int x){ return x == 0; }) )
+            // {
+            //     if (id == (int) ActionSpace::Arm)
+            //     {
+            //         likelihoods[i] = 100 * 0.30;                
+            //     }
+            //     else
+            //     {
+            //         likelihoods[i] = 100 * 0.70;
+            //     }
+            // }
+            // else
+            // {
+            if(counts[id] == 0)
+                likelihoods[i] = 100 * 0.20;
+            else
+            {
+                if (id == (int) ActionSpace::Arm)
+                {
+                    likelihoods[i] = 100 * 0.5;//-1;
+                }
+                else
+                {
+                    likelihoods[i] = 100 * 0.80;
+                }
+                
+            }
+        }
         else
             likelihoods[i] = (int) (100 * ( (double)counts[id] / (double) std::accumulate(counts.begin(), counts.end(), 0) ));
         ROS_DEBUG_NAMED( FINE_LOG, "  Rep: %d, Queue: %d, Likelihood: %d", id, i, likelihoods[i] );
@@ -119,7 +150,7 @@ bool CVAENNPolicy<C>::loadRepDistribution(std::string _file_name, int _rep_id)
 
         idx++;
     }
-    ROS_DEBUG_NAMED( LOG, "    Loaded %d points", m_rtrees[_rep_id].size() );
+    ROS_DEBUG( LOG, "    Loaded %d points", m_rtrees[_rep_id].size() );
 
     ifs.close();
     return true;

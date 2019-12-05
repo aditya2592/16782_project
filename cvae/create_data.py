@@ -72,8 +72,10 @@ def label_traj(complete_sample_path, complete_env_path, complete_directory_clean
         get arm and base labels from a single solution_path file
     '''
     # create conditioning variable
-    gaps = get_walls(complete_env_path)
-    # gaps = get_gaps(complete_env_path)
+    if OBSTACLE_TYPE == "GAP":
+        gaps = get_gaps(complete_env_path)
+    elif OBSTACLE_TYPE == "WALL":
+        gaps = get_walls(complete_env_path)
     start, goal = get_start_goal(complete_sample_path)
     
     # conditions = " ".join(start + goal + walls)

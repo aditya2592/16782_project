@@ -187,6 +187,7 @@ void writePath(std::string _file_name, std::string _header, std::vector<smpl::Ro
 }
 
 int main(int argc, char** argv) {
+
     SMPL_INFO("Testing the MRMHAPlanner CVAE");
     ros::init(argc, argv, "mrmha_cvae");
     ros::NodeHandle nh;
@@ -474,6 +475,8 @@ int main(int argc, char** argv) {
         ROS_ERROR("Episode: %d", ep);
         //cvae_policy->setSeed(rand());
         //cvae_policy->resetPrior();
+        srand(seed);
+
         loop_rate.sleep();
         std::string file_suffix = std::to_string(ep) + ".txt";
         status = mplanner_ros.execute(ep);
@@ -546,7 +549,7 @@ int main(int argc, char** argv) {
                         whole_path.markers.push_back(m);
                     }
                     visualizer.visualize(smpl::visual::Level::Info, markers);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                    // std::this_thread::sleep_for(std::chrono::milliseconds(200));
                 }
             }
         }

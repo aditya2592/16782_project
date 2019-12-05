@@ -20,6 +20,7 @@ template <typename C>
 CVAENNPolicy<C>::CVAENNPolicy( int _num_arms, int _num_reps ) :
     CVAEPolicy(_num_arms)
 {
+    srand(3243);
     m_rtrees.resize(_num_reps);
 }
 
@@ -50,7 +51,7 @@ int CVAENNPolicy<C>::getArm( const std::vector<C>& _contexts, const std::vector<
         // Context is a vector with : x, y of base
         auto& context = _contexts[i];
         int id = _rep_ids[i];
-        double radius = 2.0;
+        double radius = 0.5;
         std::vector<int> counts(m_rtrees.size(), 0);
         Box box( Point(context[0] - radius, context[1] - radius),
                 Point(context[0] + radius, context[1] + radius) );
@@ -111,7 +112,11 @@ bool CVAENNPolicy<C>::loadRepDistribution(std::string _file_name, int _rep_id)
         Point point = Point(x, y);
         m_rtrees[_rep_id].insert(point);
         //m_rtrees[_rep_id].insert(std::make_pair(point, idx));
-        SV_SHOW_INFO(smpl::visual::MakeSphereMarker( x, y, 0.0, 0.05, 100.0/_rep_id, "dummy_base", "cvae_base_" + std::to_string(_rep_id), idx ));
+        if(_rep_id == 1)
+            SV_SHOW_INFO(smpl::visual::MakeSphereMarker( x, y, 0.0, 0.05, 120, "dummy_base", "cvae_base_" + std::to_string(_rep_id), idx ));
+        else
+            SV_SHOW_INFO(smpl::visual::MakeSphereMarker( x, y, 0.0, 0.05, 240, "dummy_base", "cvae_base_" + std::to_string(_rep_id), idx ));
+
         idx++;
     }
     ROS_DEBUG_NAMED( LOG, "    Loaded %d points", m_rtrees[_rep_id].size() );

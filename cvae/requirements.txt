@@ -41,6 +41,7 @@ moveit-ros-planning-interface==0.9.15
 numpy==1.17.4
 oauthlib==3.1.0
 openni2-launch==0.4.1
+pandas==0.24.2
 Pillow==6.2.1
 pkg-resources==0.0.0
 pluginlib==1.11.3
@@ -51,6 +52,7 @@ pyparsing==2.4.5
 PySide2==5.13.2
 python-dateutil==2.8.1
 python-qt-binding==0.3.4
+pytz==2019.3
 PyYAML==5.1.2
 qt-dotgraph==0.3.11
 qt-gui==0.3.11

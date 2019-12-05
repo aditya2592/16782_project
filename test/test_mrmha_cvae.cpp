@@ -107,12 +107,18 @@ smpl::GoalConstraint stringToGoalConstraint(std::string _pose_str){
     smpl::GoalConstraint goal;
     goal.type = smpl::GoalType::XYZ_RPY_GOAL;
     goal.pose = goal_pose;
-    goal.xyz_tolerance[0] = 0.06;
-    goal.xyz_tolerance[1] = 0.06;
-    goal.xyz_tolerance[2] = 0.06;
-    goal.rpy_tolerance[0] = 0.39;
-    goal.rpy_tolerance[1] = 0.39;
-    goal.rpy_tolerance[2] = 0.39;
+    goal.xyz_tolerance[0] = 0.05;
+    goal.xyz_tolerance[1] = 0.05;
+    goal.xyz_tolerance[2] = 0.05;
+    goal.rpy_tolerance[0] = 3.14;
+    goal.rpy_tolerance[1] = 3.14;
+    goal.rpy_tolerance[2] = 3.14;
+    // goal.xyz_tolerance[0] = 0.06;
+    // goal.xyz_tolerance[1] = 0.06;
+    // goal.xyz_tolerance[2] = 0.06;
+    // goal.rpy_tolerance[0] = 0.39;
+    // goal.rpy_tolerance[1] = 0.39;
+    // goal.rpy_tolerance[2] = 0.39;
 
     return goal;
 }
@@ -500,15 +506,48 @@ int main(int argc, char** argv) {
             int idx = 0;
             for( int pidx=0; pidx<plan.size(); pidx++ ){
                 auto& state = plan[pidx];
-                auto markers = cc.getCollisionRobotVisualization(state);
-                for (auto& m : markers.markers) {
-                    m.ns = "path_animation";
-                    m.id = idx;
-                    idx++;
-                    whole_path.markers.push_back(m);
+                std::vector<double> color(3, 0.0);
+                if(pidx > 0)
+                {
+                    auto before = plan[pidx-1];
+                    auto after = plan[pidx];
+                    std::vector<double> diff(before.size(), 0.0);
+                    int index = -1;
+                    for(int i = 0; i < before.size(); i++)
+                    {
+                        diff[i] = fabs(after[i] - before[i]);
+                        if(diff[i] > 0.001)
+                            index = i;
+                    }
+                    if(index < 3)
+                    {
+                        color[0] = 0;
+                        color[1] = 1;
+                        color[2] = 0;
+                    }
+                    else
+                    {
+                        color[0] = 0;
+                        color[1] = 0;
+                        color[2] = 1;
+                    }
                 }
-                visualizer.visualize(smpl::visual::Level::Info, markers);
-                //std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                if (pidx % 2 == 0)
+                {
+                    auto markers = cc.getCollisionRobotVisualization(state);
+                    for (auto& m : markers.markers) {
+                        m.ns = "path_animation";
+                        m.id = idx;
+                        m.color.r = color[0];
+                        m.color.g = color[1];
+                        m.color.b = color[2];
+
+                        idx++;
+                        whole_path.markers.push_back(m);
+                    }
+                    visualizer.visualize(smpl::visual::Level::Info, markers);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                }
             }
         }
 

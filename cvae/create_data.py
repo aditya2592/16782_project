@@ -15,6 +15,7 @@ def get_walls(complete_env_path):
         while line:
             if "wall" in line:
                 wall = line.strip(" ").strip("\n").split(" ")[1:3]
+                walls.extend(wall)
                 count = count + 1
             
             line = e.readline()
@@ -71,8 +72,8 @@ def label_traj(complete_sample_path, complete_env_path, complete_directory_clean
         get arm and base labels from a single solution_path file
     '''
     # create conditioning variable
-    # walls = get_walls(complete_env_path)
-    gaps = get_gaps(complete_env_path)
+    gaps = get_walls(complete_env_path)
+    # gaps = get_gaps(complete_env_path)
     start, goal = get_start_goal(complete_sample_path)
     
     # conditions = " ".join(start + goal + walls)

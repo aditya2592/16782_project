@@ -140,9 +140,9 @@ class CVAE(nn.Module):
             self.tf_path = '{}/{}/{}/'.format(self.experiment_path_prefix, self.run_id, self.tf_sub_path)
             if not os.path.exists(self.tf_path):
                 os.makedirs(self.tf_path)
-            else:
-                shutil.rmtree(self.tf_path)
-                os.makedirs(self.tf_path)
+            # else:
+            #     shutil.rmtree(self.tf_path)
+            #     os.makedirs(self.tf_path)
 
             self.tboard = SummaryWriter(self.tf_path)
 
@@ -215,6 +215,6 @@ class CVAE(nn.Module):
         # BCE = torch.nn.functional.binary_cross_entropy(
         #     recon_x, x, reduction='sum')
         MSE = torch.nn.functional.mse_loss(recon_x, x, reduction='sum')
-        KLD = -0.1 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
+        KLD = -0.25 * torch.sum(1 + log_var - mean.pow(2) - log_var.exp())
 
         return (MSE + KLD) / x.size(0)

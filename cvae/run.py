@@ -52,10 +52,21 @@ class CVAEInterface():
         for env_dir_index in filter(lambda f: f[0].isdigit(), env_dir_paths):
             env_paths_file = os.path.join(dataset_root, env_dir_index, "data_{}.txt".format(data_type))
             env_paths = np.loadtxt(env_paths_file)
-            condition_vars = env_paths[:,X_DIM:X_DIM+C_DIM]
+            # 4 to 16
+            if IGNORE_START:
+                start = env_paths[:,X_DIM:2*X_DIM]
+                samples = env_paths[:,:X_DIM]
+                euc_dist = np.linalg.norm(start-samples, axis=1)
+                far_from_start = np.where(euc_dist > 5.0)
+                print(far_from_start)
+                env_paths = env_paths[far_from_start[0], :]
+                condition_vars = env_paths[:,2*X_DIM:2*X_DIM+C_DIM]
+            else:
+                condition_vars = env_paths[:,X_DIM:X_DIM+C_DIM]
             # print(env_paths.shape)
             # Take only required elements
-            env_paths = env_paths[:, :X_DIM + C_DIM]
+            # env_paths = env_paths[:, :X_DIM + C_DIM]
+            env_paths = np.hstack((env_paths[:, :X_DIM], condition_vars))
             # Uniquify to remove duplicates
             env_paths = np.unique(env_paths, axis=0)
             env_index = np.empty((env_paths.shape[0], 1))
@@ -163,13 +174,17 @@ class CVAEInterface():
             Plot samples and environment - from train input or predicted output
         '''
         # print(c)
-        start = c[0:2]
-        goal = c[2:4]
+        if IGNORE_START:
+            goal = c[0:2]
+        else:
+            start = c[0:2]
+            goal = c[2:4]
         # For given conditional, plot the samples
         fig1 = plt.figure(figsize=(10, 6), dpi=80)
         # ax1 = fig1.add_subplot(111, aspect='equal')
         plt.scatter(x[:, 0], x[:, 1], color="green", s=70, alpha=0.1)
-        plt.scatter(start[0], start[1], color="blue", s=70, alpha=0.6)
+        if IGNORE_START == False:
+            plt.scatter(start[0], start[1], color="blue", s=70, alpha=0.6)
         plt.scatter(goal[0], goal[1], color="red", s=70, alpha=0.6)
         if env_id is not None:
             self.visualize_map(env_id)
@@ -337,8 +352,6 @@ if __name__ == "__main__":
                                     output_path=output_path,
                                     env_path_root=env_path_root)
 
-    cvae_interface.load_dataset(train_dataset_root, data_type=dataset_type, mode="train")
-    cvae_interface.visualize_train_data(num_conditions=50)
     cvae_interface.load_dataset(test_dataset_root, data_type=dataset_type, mode="test")
     if test_only:
         if decoder_path is None or output_path is None:
@@ -346,6 +359,8 @@ if __name__ == "__main__":
         cvae_interface.load_saved_cvae(decoder_path)
         cvae_interface.test(0, cvae_interface.test_dataloader, write_file=True)
     else:
+        cvae_interface.load_dataset(train_dataset_root, data_type=dataset_type, mode="train")
+        cvae_interface.visualize_train_data(num_conditions=50)
         cvae_interface.train(
                     run_id=run_id,
                     num_epochs=num_epochs,

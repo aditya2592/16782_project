@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 from walker_planner.srv import Prediction, PredictionRequest, PredictionResponse
 
-from create_data import get_gaps
+from create_data import get_gaps, get_walls
 from run import CVAEInterface
 from visualize_prob import generate_gaussian
 from model_constants import *
@@ -104,7 +104,8 @@ class MRMHAInterface():
         self.PACKAGE_ROOT = rospack.get_path('walker_planner')
         self.URDF_LAUNCH_FILE = "{}/launch/planning_context_walker.launch".format(self.PACKAGE_ROOT)
         self.GEN_START_GOAL_LAUNCH_FILE = "{}/launch/generate_start_goals.launch".format(self.PACKAGE_ROOT)
-        if cvae_planner:
+        self.cvae_planner = cvae_planner
+        if self.cvae_planner:
             self.GEN_PATHS_LAUNCH_FILE = "{}/launch/test_mrmha_cvae.launch".format(self.PACKAGE_ROOT)
             self.PLANNER_PARAM_PREFIX = "test_mrmha_cvae"
         else:
@@ -171,7 +172,7 @@ class MRMHAInterface():
                                     output_path=output_path,
                                     env_path_root=self.env_path_root)
         cvae_interface.load_saved_cvae(decoder_path)
-        cvae_samples = cvae_interface.test_single(env_id, sample_size=2000, c_test=condition)
+        cvae_samples = cvae_interface.test_single(env_id, sample_size=1000, c_test=condition)
 
         # fig = plt.figure()
         # cvae_interface.visualize_map(env_id)
@@ -203,18 +204,27 @@ class MRMHAInterface():
                 "{}/base_file_name".format(self.PLANNER_PARAM_PREFIX) : base_output_file_path,
             }
             self.set_ros_param_from_dict(params)
-            gaps = np.array(get_gaps(env_file_path), dtype=np.float32)
-            start_state = np.loadtxt(start_states_path, skiprows=1)[episode_id,:]
-            goal_state = np.loadtxt(goal_states_path, skiprows=0)[episode_id,:]
-            # Run CVAE
-            arm_cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state, arm_decoder_path, arm_cvae_output_path, "planner_arm_test")
-            base_cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state, base_decoder_path, base_cvae_output_path, "planner_base_test")
-            # Do GMM
-            # ps = prediction_server(cvae_samples)
-            # rospy.spin()
+            # Use gaps for new environment and walls for old one
+            # gaps = np.array(get_gaps(env_file_path), dtype=np.float32)
+            if self.cvae_planner:
+                gaps = np.array(get_walls(env_file_path), dtype=np.float32)
+                start_state = np.loadtxt(start_states_path, skiprows=1)[episode_id,:]
+                goal_state = np.loadtxt(goal_states_path, skiprows=0)[episode_id,:]
+                # Run CVAE
+                arm_cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state, arm_decoder_path, arm_cvae_output_path, "planner_arm_test")
+                base_cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state, base_decoder_path, base_cvae_output_path, "planner_base_test")
+                # Do GMM
+                # ps = prediction_server(cvae_samples)
+                # rospy.spin()
 
             # Run Planner
             self.launch_ros_node(self.GEN_PATHS_LAUNCH_FILE)
+
+            return {
+                'arm_cvae_output_path' : arm_cvae_output_path,
+                'base_cvae_output_path' : base_cvae_output_path,
+                'planner_output_path' : self.temp_path
+            }
 
 
     def run_generate(self):
@@ -273,7 +283,7 @@ if __name__ == "__main__":
     input_path = args.input_path
     arm_decoder_path = args.arm_decoder_path
     base_decoder_path = args.base_decoder_path
-    episode_id = int(args.episode_id)
+    episode_id = args.episode_id
     cvae_planner = args.cvae_planner
 
     mrmha = MRMHAInterface(env_path_root = env_path_root, 
@@ -285,10 +295,51 @@ if __name__ == "__main__":
         print("Running test only mode for environemnt : {}, episode : {} (dump_0)".format(env_list, episode_id))
         assert(input_path != "")
         assert(arm_decoder_path != "")
-        mrmha.run_test(input_path=input_path, 
-                    arm_decoder_path=arm_decoder_path, 
-                    base_decoder_path=base_decoder_path,
-                    episode_id=episode_id)
+        
+        if episode_id == "all":
+            import pandas as pd
+            all_stats = {
+                'episode_id' : [],
+                'runtime' : [],
+                'expansions' : []
+            }
+            assert(output_path != "")
+            for episode_id in range(0,30):
+                output_paths = mrmha.run_test(input_path=input_path, 
+                                                        arm_decoder_path=arm_decoder_path, 
+                                                        base_decoder_path=base_decoder_path,
+                                                        episode_id=episode_id)             
+                episode_output_path =  "{}/{}".format(mrmha.output_path, episode_id)
+                print("Putting results in : {}".format(episode_output_path))
+                delete_mkdir(episode_output_path)
+                if mrmha.cvae_planner:
+                    shutil.move(output_paths['arm_cvae_output_path'], episode_output_path)
+                    shutil.move(output_paths['base_cvae_output_path'], episode_output_path)
+                
+                planning_stats_path = "{}/planning_stats.txt".format(output_paths['planner_output_path'])
+                all_stats['episode_id'].append(episode_id)
+                if os.path.exists(planning_stats_path):
+                    run_stats = np.loadtxt(planning_stats_path)
+                    shutil.move(planning_stats_path, episode_output_path)
+                    all_stats['runtime'].append(run_stats[2])
+                    all_stats['expansions'].append(run_stats[3])
+                    all_stats['cost'].append(run_stats[4])
+                else:
+                    all_stats['runtime'].append(-1)
+                    all_stats['expansions'].append(-1)
+                    all_stats['cost'].append(-1)
+
+            pd.DataFrame.from_dict(data=all_stats, orient='columns'). \
+                to_csv('all_results_{}.csv'.format("cvae" if cvae_planner else "no_cvae"), header=True, index=False)
+            
+        else:
+            episode_id = int(episode_id)
+            mrmha.run_test(input_path=input_path, 
+                        arm_decoder_path=arm_decoder_path, 
+                        base_decoder_path=base_decoder_path,
+                        episode_id=episode_id)
+
+        
     else:
         mrmha.run_generate()
     

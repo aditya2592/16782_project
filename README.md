@@ -133,6 +133,17 @@ Testing CVAE
   
   Testing Full Pipeline
   ---------------------
+  #### Testing single episode:
   ```
 python generate_map_paths.py --env_path_root $PWD/../env  --env_list 34 --test_only --input_path $PWD/../data/test/ --arm_decoder_path experiments/cvae/arm_multi_env_tables/decoder-final.pkl --base_decoder_path experiments/cvae/base_multi_env_tables/decoder-final.pkl --episode_id 5
+  ```
+  
+  #### Testing batch :
+  With CVAE
+  ```
+  python generate_map_paths.py --env_path_root $PWD/../env  --env_list 1 --test_only --input_path $PWD/../data/test  --arm_decoder_path experiments/cvae/multi_env_tables/arm_multi_env_tables/decoder-final.pkl  --base_decoder_path experiments/cvae/multi_env_tables/base_multi_env_tables/decoder-final.pkl --episode_id all --output_path env_1/test/cvae --cvae_planner
+  ```
+  Without CVAE:
+  ```
+  python generate_map_paths.py --env_path_root $PWD/../env  --env_list 1 --test_only --input_path $PWD/../data/test  --arm_decoder_path experiments/cvae/multi_env_tables/arm_multi_env_tables/decoder-final.pkl  --base_decoder_path experiments/cvae/multi_env_tables/base_multi_env_tables/decoder-final.pkl --episode_id all --output_path env_1/test/cvae
   ```

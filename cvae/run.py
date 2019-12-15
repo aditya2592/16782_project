@@ -52,10 +52,31 @@ class CVAEInterface():
         for env_dir_index in filter(lambda f: f[0].isdigit(), env_dir_paths):
             env_paths_file = os.path.join(dataset_root, env_dir_index, "data_{}.txt".format(data_type))
             env_paths = np.loadtxt(env_paths_file)
-            condition_vars = env_paths[:,X_DIM:X_DIM+C_DIM]
+            # 4 to 16
+            if IGNORE_START:
+                start = env_paths[:,X_DIM:2*X_DIM]
+                samples = env_paths[:,:X_DIM]
+                euc_dist = np.linalg.norm(start-samples, axis=1)
+                far_from_start = np.where(euc_dist > 5.0)
+                print(far_from_start)
+                env_paths = env_paths[far_from_start[0], :]
+                condition_vars = env_paths[:,2*X_DIM:2*X_DIM+C_DIM]
+            else:
+                if mode == "train":
+                    # Testing, less points near start to reduce them in sampled output
+                    start = env_paths[:,X_DIM:X_DIM+POINT_DIM]
+                    samples = env_paths[:,:X_DIM]
+                    euc_dist = np.linalg.norm(start-samples, axis=1)
+                    far_from_start = np.where(euc_dist > 2.0)
+                    # print(far_from_start)
+                    env_paths = env_paths[far_from_start[0], :]
+
+                condition_vars = env_paths[:,X_DIM:X_DIM+C_DIM]
             # print(env_paths.shape)
+            # Stuff for train dataloader
             # Take only required elements
-            env_paths = env_paths[:, :X_DIM + C_DIM]
+            # env_paths = env_paths[:, :X_DIM + C_DIM]
+            env_paths = np.hstack((env_paths[:, :X_DIM], condition_vars))
             # Uniquify to remove duplicates
             env_paths = np.unique(env_paths, axis=0)
             env_index = np.empty((env_paths.shape[0], 1))
@@ -63,6 +84,7 @@ class CVAEInterface():
             data = np.hstack((env_index, env_paths))
             paths_dataset.add_env_paths(data.tolist())
 
+            # Stuff for test dataloader
             env_index = np.empty((condition_vars.shape[0], 1))
             env_index.fill(env_dir_index)
             data = np.hstack((env_index, condition_vars))
@@ -72,36 +94,36 @@ class CVAEInterface():
         dataloader = DataLoader(paths_dataset, batch_size=TRAIN_BATCH_SIZE, shuffle=True)
 
         if data_type != "both":
-            self.all_condition_vars = np.unique(all_condition_vars, axis=0)
-            print("Unique test conditions count : {}".format(self.all_condition_vars.shape[0]))
-            # Tile condition variables to predict given number of samples for x
-            all_condition_vars_tile = np.repeat(self.all_condition_vars, TEST_SAMPLES, 0)
-            c_test_dataset.add_env_paths(all_condition_vars_tile.tolist())
-            c_test_dataloader = DataLoader(c_test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
-
+            
             # Depending on which dataset is being loaded, set the right variables
             if mode == "train":
                 self.train_dataloader = dataloader
                 self.train_paths_dataset = paths_dataset
             elif mode == "test":
+                self.test_condition_vars = np.unique(all_condition_vars, axis=0)
+                print("Unique test conditions count : {}".format(self.test_condition_vars.shape[0]))
+                # Tile condition variables to predict given number of samples for x
+                all_condition_vars_tile = np.repeat(self.test_condition_vars, TEST_SAMPLES, 0)
+                c_test_dataset.add_env_paths(all_condition_vars_tile.tolist())
+                c_test_dataloader = DataLoader(c_test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
                 self.test_dataloader = c_test_dataloader 
         else:
             arm_test_dataset = PathsDataset(type="CONDITION_ONLY")
             base_test_dataset = PathsDataset(type="CONDITION_ONLY")
 
             all_condition_vars = np.array(all_condition_vars)
-            self.all_condition_vars = np.delete(all_condition_vars, [4, 5], axis=1)
-            self.all_condition_vars = np.unique(self.all_condition_vars, axis=0)
-            print("Unique test conditions count : {}".format(self.all_condition_vars.shape[0]))
-            # print(self.all_condition_vars)
-            arm_condition_vars = np.insert(self.all_condition_vars, 2*POINT_DIM, 1, axis=1)
+            self.test_condition_vars = np.delete(all_condition_vars, [4, 5], axis=1)
+            self.test_condition_vars = np.unique(self.test_condition_vars, axis=0)
+            print("Unique test conditions count : {}".format(self.test_condition_vars.shape[0]))
+            # print(self.test_condition_vars)
+            arm_condition_vars = np.insert(self.test_condition_vars, 2*POINT_DIM, 1, axis=1)
             arm_condition_vars = np.insert(arm_condition_vars, 2*POINT_DIM, 0, axis=1)
 
             arm_condition_vars = np.repeat(arm_condition_vars, TEST_SAMPLES, 0)
             arm_test_dataset.add_env_paths(arm_condition_vars.tolist())
             arm_test_dataloader = DataLoader(arm_test_dataset, batch_size=TEST_BATCH_SIZE, shuffle=False)
 
-            base_condition_vars = np.insert(self.all_condition_vars, 2*POINT_DIM, 0, axis=1)
+            base_condition_vars = np.insert(self.test_condition_vars, 2*POINT_DIM, 0, axis=1)
             base_condition_vars = np.insert(base_condition_vars, 2*POINT_DIM, 1, axis=1)
 
             base_condition_vars = np.repeat(base_condition_vars, TEST_SAMPLES, 0)
@@ -163,13 +185,17 @@ class CVAEInterface():
             Plot samples and environment - from train input or predicted output
         '''
         # print(c)
-        start = c[0:2]
-        goal = c[2:4]
+        if IGNORE_START:
+            goal = c[0:2]
+        else:
+            start = c[0:2]
+            goal = c[2:4]
         # For given conditional, plot the samples
         fig1 = plt.figure(figsize=(10, 6), dpi=80)
         # ax1 = fig1.add_subplot(111, aspect='equal')
         plt.scatter(x[:, 0], x[:, 1], color="green", s=70, alpha=0.1)
-        plt.scatter(start[0], start[1], color="blue", s=70, alpha=0.6)
+        if IGNORE_START == False:
+            plt.scatter(start[0], start[1], color="blue", s=70, alpha=0.6)
         plt.scatter(goal[0], goal[1], color="red", s=70, alpha=0.6)
         if env_id is not None:
             self.visualize_map(env_id)
@@ -209,7 +235,7 @@ class CVAEInterface():
         x_test = x_test.detach().cpu().numpy()
 
         if visualize:
-            self.plot(x_test, c_test, env_id=env_id, show=False)
+            self.plot(x_test, c_test, env_id=env_id, show=False, write_file=True, suffix=0)
         return x_test
 
     def test(self, epoch, dataloader, write_file=False, suffix=""):
@@ -230,11 +256,12 @@ class CVAEInterface():
         x_test_predicted = np.array(x_test_predicted)
         # print(x_test_predicted.shape)
         # Draw plot for each unique condition
-        for c_i in range(self.all_condition_vars.shape[0]):
+        for c_i in range(self.test_condition_vars.shape[0]):
             x_test = x_test_predicted[c_i * TEST_SAMPLES : (c_i + 1) * TEST_SAMPLES]
             # Fine because c_test is used only for plotting, we dont need arm/base label here
-            c_test = self.all_condition_vars[c_i, 1:]
-            env_id = self.all_condition_vars[c_i, 0]
+            c_test = self.test_condition_vars[c_i, 1:]
+            env_id = self.test_condition_vars[c_i, 0]
+            # print(self.test_condition_vars[c_i,:])
             fig = self.plot(x_test, c_test, env_id=env_id, suffix=c_i, write_file=write_file)
             self.cvae.tboard.add_figure('test_epoch_{}/condition_{}_{}'.format(epoch, c_i, suffix), fig, 0)
             if c_i % LOG_INTERVAL == 0:
@@ -337,8 +364,6 @@ if __name__ == "__main__":
                                     output_path=output_path,
                                     env_path_root=env_path_root)
 
-    cvae_interface.load_dataset(train_dataset_root, data_type=dataset_type, mode="train")
-    cvae_interface.visualize_train_data(num_conditions=50)
     cvae_interface.load_dataset(test_dataset_root, data_type=dataset_type, mode="test")
     if test_only:
         if decoder_path is None or output_path is None:
@@ -346,6 +371,8 @@ if __name__ == "__main__":
         cvae_interface.load_saved_cvae(decoder_path)
         cvae_interface.test(0, cvae_interface.test_dataloader, write_file=True)
     else:
+        cvae_interface.load_dataset(train_dataset_root, data_type=dataset_type, mode="train")
+        cvae_interface.visualize_train_data(num_conditions=50)
         cvae_interface.train(
                     run_id=run_id,
                     num_epochs=num_epochs,

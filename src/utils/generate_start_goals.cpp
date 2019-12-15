@@ -302,7 +302,6 @@ bool addStartRegionsForRoom5(
     return true;
 }
 
-
 int main(int argc, char** argv){
     ros::init(argc, argv, "generate_start_goal");
     ros::NodeHandle nh;
@@ -416,7 +415,6 @@ int main(int argc, char** argv){
         ROS_ERROR("Failed to read planner config");
         return 1;
     }
-    planning_config.cost_per_cell = 1000;
     ROS_INFO("Initialize scene");
 
     scene_ptr->SetCollisionSpace(&cc);
@@ -463,7 +461,7 @@ int main(int argc, char** argv){
     //}
 
     SV_SHOW_INFO(cc.getCollisionRobotVisualization());
-    SV_SHOW_INFO(cc.getCollisionWorldVisualization());
+    SV_SHOW_INFO(cc.getOccupiedVoxelsVisualization());
 
     StartGoalGenerator<RobotModel> generator;
 

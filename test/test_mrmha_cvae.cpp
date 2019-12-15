@@ -1,4 +1,4 @@
-//#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/LinearMath/Quaternion.h>
 #include <sstream>
 #include <memory>
 #include <fstream>
@@ -6,7 +6,6 @@
 #include <time.h>
 
 #include <ros/ros.h>
-#include <trac_ik_robot_model/trac_ik_robot_model.h>
 #include <smpl/graph/manip_lattice_action_space.h>
 #include <smpl/graph/manip_lattice_multi_rep.h>
 #include <smpl/graph/motion_primitive.h>
@@ -19,14 +18,13 @@
 //#include <sbpl/planners/mrmhaplanner.h>
 #include <smpl/search/smhastar.h>
 #include <sbpl/planners/types.h>
-#include <panini/algo.h>
 
 #include "heuristics/walker_heuristics.h"
-#include "planners/mrmhaplanner.h"
-#include "planners/mhaplanner.h"
-#include "motion_planner.h"
+#include "planners/mrmhaplanner_cobandits.h"
+#include "context_features.h"
 #include "motion_planner_ros.h"
 #include "scheduling_policies.h"
+#include "cvae_scheduling_policies.h"
 #include "utils/utils.h"
 
 class ReadExperimentsFromFile {
@@ -45,8 +43,7 @@ class ReadExperimentsFromFile {
     bool init( std::string, std::string );
 };
 
-ReadExperimentsFromFile::ReadExperimentsFromFile(ros::NodeHandle _nh) :
-    m_nh{_nh}{
+ReadExperimentsFromFile::ReadExperimentsFromFile(ros::NodeHandle _nh) : m_nh{_nh}{
     std::string start_file, goal_file;
     m_nh.getParam("robot_start_states_file", start_file);
     m_nh.getParam("robot_goal_states_file", goal_file);
@@ -116,6 +113,12 @@ smpl::GoalConstraint stringToGoalConstraint(std::string _pose_str){
     goal.rpy_tolerance[0] = 3.14;
     goal.rpy_tolerance[1] = 3.14;
     goal.rpy_tolerance[2] = 3.14;
+    // goal.xyz_tolerance[0] = 0.06;
+    // goal.xyz_tolerance[1] = 0.06;
+    // goal.xyz_tolerance[2] = 0.06;
+    // goal.rpy_tolerance[0] = 0.39;
+    // goal.rpy_tolerance[1] = 0.39;
+    // goal.rpy_tolerance[2] = 0.39;
 
     return goal;
 }
@@ -184,8 +187,9 @@ void writePath(std::string _file_name, std::string _header, std::vector<smpl::Ro
 }
 
 int main(int argc, char** argv) {
-    SMPL_INFO("MRMHAPlanner");
-    ros::init(argc, argv, "mrmhaplanner");
+
+    SMPL_INFO("Testing the MRMHAPlanner CVAE");
+    ros::init(argc, argv, "mrmha_cvae");
     ros::NodeHandle nh;
     ros::NodeHandle ph("~");
     ros::Rate loop_rate(10);
@@ -301,8 +305,7 @@ int main(int argc, char** argv) {
     scene_ptr->SetCollisionSpace(&cc);
 
     ROS_INFO("Setting up robot model");
-    //auto rm = SetupRobotModel<smpl::KDLRobotModel>(robot_description, robot_config);
-    auto rm = SetupRobotModel<smpl::KDLRobotModel>(robot_description, robot_config);
+    auto rm = SetupRobotModel(robot_description, robot_config);
     if (!rm) {
         ROS_ERROR("Failed to set up Robot Model");
         return 1;
@@ -399,47 +402,81 @@ int main(int argc, char** argv) {
     Heuristic* anchor_heur = heurs[0];
     std::vector<Heuristic*> inad_heurs( heurs.begin() + 1, heurs.end() );
 
-    // if aij = 1 :  closed in rep i => closed in rep j
+    //if aij = 1 :  closed in rep i => closed in rep j
     std::array< std::array<int, NUM_ACTION_SPACES>, NUM_ACTION_SPACES >
         rep_dependency_matrix = {{ {{1, 1, 1}},
                                   {{0, 1, 0}},
-                                  {{0, 1, 0}} }};
-    //std::array< std::array<int, NUM_ACTION_SPACES>, NUM_ACTION_SPACES >
-        //rep_dependency_matrix = {{ {{1}} }};
+                                  {{0, 0, 1}} }};
+        //rep_dependency_matrix = {{ {{1, 1}},
+                                  //{{0, 1}} }};
 
+    // Context
+    using ContextArray = std::array<double, 2>;
+    //using ContextT = MobManipDiscreteFeatures<4>;
+    using ContextT = CVAEContext;
+    //auto context_features = std::make_unique<ContextT> (rm.get(), space.get(), nullptr,
+            //dynamic_cast<smpl::Bfs3DBaseHeuristic*> (bfs_heurs[0].get()),
+            //dynamic_cast<smpl::Bfs3DHeuristic*> (bfs_heurs[1].get()) );
+    auto context_features = std::make_unique<ContextT>(space.get());
 
-    //auto uniformly_random_policy = std::make_unique<UniformlyRandomPolicy>(inad_heurs.size(), 100);
-    auto round_robin_policy = std::make_unique<RoundRobinPolicy>(inad_heurs.size());
+    const unsigned int seed = 100;
+    using PolicyT = CVAENNPolicy<ContextArray>;
+    auto cvae_policy = std::make_unique<PolicyT>(NUM_QUEUES, NUM_ACTION_SPACES);
+    std::string arm_file_name, base_file_name;
+    ph.getParam("arm_file_name", arm_file_name);
+    ph.getParam("base_file_name", base_file_name);
+    ROS_WARN("Arm file name: %s", arm_file_name.c_str());
+    ROS_WARN("Base file name: %s", base_file_name.c_str());
+    if(!cvae_policy->loadRepDistribution(arm_file_name,  ActionSpace::Arm) ||
+            !cvae_policy->loadRepDistribution(base_file_name, ActionSpace::Base) )
+    {
+        ROS_ERROR("Could not load rep distributions.");
+        return 1;
+    }
 
-    using Planner = MRMHAPlanner<NUM_QUEUES, NUM_ACTION_SPACES, RoundRobinPolicy>;
-    //auto search_ptr = std::make_unique<Planner>(
-    //        space.get(), heurs_array, rep_ids, rep_dependency_matrix, uniformly_random_policy.get() );
+    //std::vector<ContextArray> contexts;
+    //std::vector<int> context_ids;
+
+    //for(int i = 0; i < 16; i++)
+    //{
+        //ContextArray context = {0, 0, 0, 0};
+        //contexts.push_back(context);
+        //context_ids.push_back(i);
+    //}
+    //// Narrow passage near
+    //contexts[0] = {0, 0, 0, 1};
+    //contexts[1] = {1, 1, 0, 1};
+
+    //dts_policy->setContextIdMap(contexts, context_ids);
+    //dts_policy->setBetaPrior(contexts[0], (int)Fullbody, 9, 1 );
+    //dts_policy->setBetaPrior(contexts[0], (int)Arm, 1, 9 );
+    //dts_policy->setBetaPrior(contexts[1], (int)Arm, 9, 1 );
+
+    using Planner = MRMHAPlannerCoBandits<NUM_QUEUES, NUM_ACTION_SPACES, PolicyT, ContextT>;
     auto search_ptr = std::make_unique<Planner>(
-            space.get(), heurs_array, rep_ids, rep_dependency_matrix, round_robin_policy.get() );
-
+            space.get(), heurs_array, rep_ids, rep_dependency_matrix,
+            cvae_policy.get(), context_features.get() );
     const int max_planning_time = planning_config.planning_time;
     const double eps = planning_config.eps;
     const double eps_mha = planning_config.eps_mha;
     MPlanner::PlannerParams planner_params = { max_planning_time, eps, eps_mha, false };
 
-    //using MotionPlanner = MPlanner::MotionPlanner<Planner, smpl::ManipLatticeMultiRep>;
-    using MotionPlanner = MPlanner::MotionPlanner<Planner, smpl::ManipLattice>;
+    using MotionPlanner = MPlanner::MotionPlanner<Planner, smpl::ManipLatticeMultiRep>;
     auto mplanner = std::make_unique<MotionPlanner>();
     mplanner->init(search_ptr.get(), space.get(), heurs, planner_params);
 
-    MotionPlannerROS< Callbacks<smpl::KDLRobotModel>,
-        ReadExperimentsFromFile,
-        MotionPlanner,
-        smpl::KDLRobotModel>
-        mplanner_ros(ph, rm.get(), scene_ptr.get(), mplanner.get(), grid_ptr.get());
+    MotionPlannerROS< Callbacks<>, ReadExperimentsFromFile, MotionPlanner > mplanner_ros(ph, rm.get(), scene_ptr.get(), mplanner.get(), grid_ptr.get());
 
     ExecutionStatus status = ExecutionStatus::WAITING;
-    //while(status == ExecutionStatus::WAITING) {
     std::string file_prefix = "paths/solution_path";
     std::ofstream stats_file;
     PlanningEpisode ep = planning_config.start_planning_episode;
     while(ep <= planning_config.end_planning_episode){
         ROS_ERROR("Episode: %d", ep);
+        //cvae_policy->setSeed(rand());
+        //cvae_policy->resetPrior();
+        srand(seed);
+
         loop_rate.sleep();
         std::string file_suffix = std::to_string(ep) + ".txt";
         status = mplanner_ros.execute(ep);
@@ -449,6 +486,8 @@ int main(int argc, char** argv) {
             ROS_INFO("Planning Time: %f", mplanner_ros.getPlan(ep).planning_time);
             ROS_INFO("----------------");
             auto plan = mplanner_ros.getPlan(ep).robot_states;
+            space->clearStates();
+            search_ptr->force_planning_from_scratch();
 
             // Write to file.
             stats_file.open("planning_stats.txt", std::ios::app);
@@ -468,8 +507,6 @@ int main(int argc, char** argv) {
             std::vector<visualization_msgs::Marker> m_all;
 
             int idx = 0;
-            // Comment out visualization for speedup
-
             for( int pidx=0; pidx<plan.size(); pidx++ ){
                 auto& state = plan[pidx];
                 std::vector<double> color(3, 0.0);

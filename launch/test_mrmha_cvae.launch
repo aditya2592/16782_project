@@ -18,7 +18,7 @@
     <!-- <node name="rviz" pkg="rviz" type="rviz" args="-d $(arg rvizconfig)"
 required="true" /> -->
 
-    <node pkg="walker_planner" type="mrmhaplanner" name="mrmhaplanner"
+    <node pkg="walker_planner" type="test_mrmha_cvae" name="test_mrmha_cvae"
             launch-prefix="$(arg launch-prefix)" output="screen" required="true">
         <param name="planning_frame" value="dummy_base"/>
 
@@ -55,23 +55,21 @@ required="true" /> -->
         <param name="planning/mprim_filename" value="$(find
         walker_planner)/config/walker_multi_rep.mprim"/>
 
-        <param name="allowed_planning_time" value="20.0"/>
-        <param name="read_goal_from_file" value="true"/>
-        <!-- <param name="robot_start_states_file" value="$(find
-        walker_planner)/experiments/start_states.txt" />
-        <param name="robot_goal_states_file" value="$(find
-        walker_planner)/experiments/goal_poses.txt" /> -->
+        <!-- <param name="robot_start_states_file" value="$(find walker_planner)/experiments/train/easy/short/start_states.txt" /> -->
+        <!-- <param name="robot_goal_states_file" value="$(find walker_planner)/experiments/train/easy/short/goal_poses.txt" /> -->
 
         <!-- 2. scene -->
         <!-- 2.1 robot state -->
-        <rosparam command="load" file="$(find walker_planner)/experiments/walker_goal_mrmha.yaml"/>
+        <rosparam command="load" file="$(find
+        walker_planner)/experiments/walker_goal_mrmha.yaml"/>
 
         <rosparam command="load" file="$(find walker_planner)/env/multi_room_map.yaml" />
 
         <!-- 2.2 world state -->
-        <!-- <param name="object_filename" value="$(find walker_planner)/env/proj_env.env"/> -->
+        <!-- <param name="object_filename" value="$(find walker_planner)/experiments/train/easy/multi_room_map.env"/> -->
 
-        <!-- 3. scenario -->
+        <!-- <param name="arm_file_name" value="$(find walker_planner)/data/cvae_output/arm_output/gen_points_0.txt"/> -->
+        <!-- <param name="base_file_name" value="$(find walker_planner)/data/cvae_output/base_output/gen_points_0.txt"/> -->
 
     </node>
 

@@ -121,6 +121,32 @@ class MRMHAInterface():
             mkdir_if_missing(self.output_path)
 
 
+    def plot_nearest_prob(self, arm, base, fix, ax, radius = 0.5, grid_res = 50, sample_size=500):
+        probs = []
+        X = np.arange(0, X_MAX, 1.0)
+        Y = np.arange(0, Y_MAX, 1.0)
+        # pointsX, pointsY = np.meshgrid(X,Y)
+        # points = np.vstack((pointsX.flatten(),pointsY.flatten())).T
+        for i in range(base.shape[0]):
+            a = 0
+            b = 1
+            p  = base[i,:]
+            for j in range(sample_size):
+                if (np.linalg.norm(np.subtract(base[j,:],p))<radius):
+                    b = b + 1
+                if (np.linalg.norm(np.subtract(arm[j,:],p))<radius):
+                    a = a + 1
+            probs.append(float(b)/(a+b))
+
+        # scatter = ax.scatter(points[:,0], points[:,1], c=probs)
+        scatter = ax.scatter(base[:,0], base[:,1], c=probs)
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.xlim(0, X_MAX)
+        plt.ylim(0, Y_MAX)
+        plt.colorbar(scatter)
+        plt.savefig('probs.png')
+
     
     def set_ros_param_from_dict(self, params):
         command = 'rosparam set / "{}"'.format(params)
@@ -178,7 +204,7 @@ class MRMHAInterface():
         # cvae_interface.visualize_map(env_id)
         # generate_gaussian(cvae_samples, X_MAX, Y_MAX, visualize=True, fig=fig)
 
-        return cvae_samples
+        return cvae_samples, cvae_interface
 
 
     def run_test(self, input_path="", arm_decoder_path="", base_decoder_path="", episode_id=0):
@@ -213,11 +239,15 @@ class MRMHAInterface():
                 start_state = np.loadtxt(start_states_path, skiprows=1)[episode_id,:]
                 goal_state = np.loadtxt(goal_states_path, skiprows=0)[episode_id,:]
                 # Run CVAE
-                arm_cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state, arm_decoder_path, arm_cvae_output_path, "planner_arm_test")
-                base_cvae_samples = self.run_cvae(env_i, gaps, start_state, goal_state, base_decoder_path, base_cvae_output_path, "planner_base_test")
+                arm_cvae_samples, cvae_interface = self.run_cvae(env_i, gaps, start_state, goal_state, arm_decoder_path, arm_cvae_output_path, "planner_arm_test")
+                base_cvae_samples, cvae_interface = self.run_cvae(env_i, gaps, start_state, goal_state, base_decoder_path, base_cvae_output_path, "planner_base_test")
                 # Do GMM
                 # ps = prediction_server(cvae_samples)
                 # rospy.spin()
+                fig, ax = plt.subplots()
+                cvae_interface.visualize_map(env_id=env_i)
+                self.plot_nearest_prob(arm_cvae_samples, base_cvae_samples, fig, ax)
+
 
             # Run Planner
             self.launch_ros_node(self.GEN_PATHS_LAUNCH_FILE)

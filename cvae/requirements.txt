@@ -139,6 +139,6 @@ torch==1.2.0+cu92
 torchvision==0.4.0+cu92
 trac-ik-python==1.5.0
 urdfdom-py==0.3.3
-urllib3==1.25.7
+urllib3==1.26.5
 Werkzeug==0.16.0
 xacro==1.11.3

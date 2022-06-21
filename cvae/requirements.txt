@@ -38,7 +38,7 @@ Markdown==3.1.1
 matplotlib==3.0.3
 message-filters==1.12.14
 moveit-ros-planning-interface==0.9.15
-numpy==1.17.4
+numpy==1.22.0
 oauthlib==3.1.0
 openni2-launch==0.4.1
 pandas==0.24.2
